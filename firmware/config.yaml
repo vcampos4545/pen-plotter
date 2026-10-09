@@ -1,0 +1,179 @@
+# FluidNC config for the 2-axis pen plotter.
+# Target: FluidNC v4.1.1 (checked against its source, FluidNC/docs/config_items.yaml).
+# Wiring and setup steps are in firmware/README.md.
+#
+#   X = pen carriage   NEMA 17 + TMC2209, UART address 0
+#   Y = paper tray     NEMA 17 + TMC2209, UART address 1
+#   Z = pen lift       MG90S hobby servo (rc_servo). Z0 = pen down, Z5 = pen up,
+#                      matching the app's defaults (Settings: pen up Z / pen down Z).
+#
+# Pin map (ESP-WROOM-32 dev board, GPIO numbers, not header positions):
+#   GPIO25  X STEP          GPIO26  X DIR
+#   GPIO33  Y STEP          GPIO32  Y DIR
+#   GPIO27  EN, shared by both drivers (high = motors off)
+#   GPIO17  UART1 TX  -> 1k resistor -> PDN_UART of both drivers
+#   GPIO16  UART1 RX  -> PDN_UART of both drivers (direct)
+#   GPIO21  servo signal
+# None of these are strapping pins (0, 2, 5, 12, 15), flash pins (6-11),
+# input-only pins (34-39) or the USB serial pins (1, 3).
+#
+# WiFi and the hostname are not part of this file. FluidNC keeps them as
+# settings in flash, so set them once from a serial terminal:
+#   $Sta/SSID=YOUR_WIFI_NAME
+#   $Sta/Password=YOUR_WIFI_PASSWORD
+#   $Hostname=plotter          (so the app's default plotter.local resolves)
+#   $WiFi/Mode=STA>AP          (the default: join your network, fall back to an
+#                               access point "FluidNC" at 192.168.0.1 if that fails)
+#   $Bye                       (restart to apply)
+
+name: "Pen Plotter"
+board: "ESP-WROOM-32 dev board + 2x TMC2209"
+
+stepping:
+  engine: RMT
+  # 255 = never turn the motors off when idle. They hold position between
+  # moves (at hold_amps), so a bumped carriage or tray does not lose its place.
+  idle_ms: 255
+  pulse_us: 2
+  dir_delay_us: 1
+  disable_delay_us: 0
+
+start:
+  # No limit switches, so there is nothing to home against. Boot straight to Idle.
+  must_home: false
+
+# One shared single-wire UART for both TMC2209s. The drivers tell themselves
+# apart by the address strapped on their MS1/MS2 pins (see the README).
+uart1:
+  txd_pin: gpio.17
+  rxd_pin: gpio.16
+  baud: 115200
+  mode: "8N1"
+
+kinematics:
+  Cartesian:
+
+axes:
+  shared_stepper_disable_pin: gpio.27
+
+  # Pen carriage.
+  x:
+    # GT2 belt (2 mm pitch) on a 20-tooth pulley = 40 mm per turn.
+    # 200 full steps x 16 microsteps / 40 mm = 80 steps/mm.
+    steps_per_mm: 80
+    # Tunable. 6000 mm/min (100 mm/s) is what G0 travel runs at, and it matches
+    # the app's default travel feed. Lower it if the motor skips.
+    max_rate_mm_per_min: 6000
+    # Tunable. Conservative for a belt-driven carriage. Raise in steps of ~100
+    # while checking that a long back-and-forth job still lands on its start point.
+    acceleration_mm_per_sec2: 300
+    # Usable length of the axis. Change this (and Y's) if your frame differs.
+    max_travel_mm: 400
+    # Rejects any move outside 0..max_travel_mm before it starts.
+    soft_limits: true
+    # No switch yet. This section only sets the soft-limit range: with
+    # positive_direction false and mpos_mm 0 the axis runs from 0 to max_travel_mm
+    # (without it FluidNC would use -max_travel_mm..0). cycle 0 keeps the axis out
+    # of $H, and allow_single_axis false refuses $HX.
+    #
+    # To enable homing once a switch is fitted at the X0 end:
+    #   1. Add  limit_neg_pin: gpio.NN:low  under motor0 (use an input-capable pin,
+    #      e.g. 34 or 35 with an external pull-up, or 13/4 with :pu).
+    #   2. Set  cycle: 2  and  allow_single_axis: true  here, and set
+    #      seek_mm_per_min / feed_mm_per_min (e.g. 1500 / 200).
+    #   3. Set  must_home: true  under start: if every job should require $H.
+    homing:
+      cycle: 0
+      allow_single_axis: false
+      positive_direction: false
+      mpos_mm: 0
+    motor0:
+      tmc_2209:
+        uart_num: 1
+        addr: 0
+        # Sense resistor on most TMC2209 modules (BigTreeTech, FYSETC, MKS). Check yours.
+        r_sense_ohms: 0.11
+        # SET TO ~70% OF YOUR MOTOR'S RATED CURRENT. The rating is unknown, so this
+        # starts at a conservative 0.6 A RMS, safe for most NEMA 17s. Raise it
+        # in 0.1 A steps only if the axis skips (README: "Setting motor current").
+        # Set over UART, so the driver's Vref potentiometer is ignored.
+        run_amps: 0.6
+        # Current while standing still. Half of run_amps is plenty for a plotter.
+        hold_amps: 0.3
+        # Must match the 16 used in steps_per_mm above.
+        microsteps: 16
+        run_mode: StealthChop
+        homing_mode: StealthChop
+        step_pin: gpio.25
+        # If X moves the wrong way, change this to  gpio.26:low  (see README).
+        direction_pin: gpio.26
+
+  # Paper tray.
+  y:
+    steps_per_mm: 80
+    # Tunable, see X.
+    max_rate_mm_per_min: 6000
+    # Tunable. A bit lower than X: the tray carries the paper and its clips and
+    # sliding friction varies. Raise it if the tray is light and runs smoothly.
+    acceleration_mm_per_sec2: 200
+    max_travel_mm: 400
+    soft_limits: true
+    # Same as X. For a Y switch at the Y0 end, use  cycle: 2  as well so X and Y
+    # home together after Z.
+    homing:
+      cycle: 0
+      allow_single_axis: false
+      positive_direction: false
+      mpos_mm: 0
+    motor0:
+      tmc_2209:
+        uart_num: 1
+        addr: 1
+        r_sense_ohms: 0.11
+        # SET TO ~70% OF YOUR MOTOR'S RATED CURRENT. See X.
+        run_amps: 0.6
+        hold_amps: 0.3
+        microsteps: 16
+        run_mode: StealthChop
+        homing_mode: StealthChop
+        step_pin: gpio.33
+        # If Y moves the wrong way, change this to  gpio.32:low.
+        direction_pin: gpio.32
+
+  # Pen lift. FluidNC maps the axis range 0..max_travel_mm onto the servo pulse
+  # range: Z0 sends min_pulse_us (pen down), Z5 sends max_pulse_us (pen up).
+  z:
+    # Only sets position resolution for the servo. It has no real steps.
+    steps_per_mm: 100
+    # A full lift (5 mm of Z) is commanded in about 0.15 s, then the app dwells
+    # 0.15 s. The MG90S itself needs roughly 0.1 s per 60 degrees.
+    max_rate_mm_per_min: 3000
+    acceleration_mm_per_sec2: 1000
+    # Must match the app's pen up Z (5). Pen down is the bottom of the range (0).
+    max_travel_mm: 5
+    soft_limits: true
+    # Keep the servo signal on so the pen stays where it was put.
+    idle_disable: false
+    # Z has no switch either. "Homing" a servo just jumps it to mpos_mm, so
+    # $H (which only runs cycle 1 here) lifts the pen straight to Z5. Run it
+    # once after power-on: Z boots at 0 (pen down) with the servo unpowered, and
+    # without $H the first move would swing the pen toward the paper first.
+    homing:
+      cycle: 1
+      allow_single_axis: true
+      positive_direction: true
+      mpos_mm: 5
+    motor0:
+      rc_servo:
+        output_pin: gpio.21
+        pwm_hz: 50
+        # Trim these two for your pen holder (see README, first power-on).
+        # 1000 to 1500 us is roughly a 45 degree swing on an MG90S.
+        # - Pen does not reach the paper: move min_pulse_us further from max_pulse_us.
+        # - Pen does not clear the paper: move max_pulse_us further from min_pulse_us.
+        # - Servo moves the wrong way (Z5 presses down): swap the two values
+        #   (min_pulse_us: 1500, max_pulse_us: 1000).
+        # - Servo buzzes at one end: it is hitting a stop; back that value off by 50.
+        # Stay within 500..2500. Change in steps of 50 and restart ($Bye) to apply.
+        min_pulse_us: 1000
+        max_pulse_us: 1500

@@ -6,6 +6,9 @@ one NEMA 17 moves the paper tray, one moves the pen, and an MG90S servo on the Z
 lifts the pen. The browser talks to FluidNC's WebSocket directly. Nothing is hosted
 on the ESP32.
 
+The controller's FluidNC `config.yaml`, wiring and first power-on steps are in
+[firmware/README.md](firmware/README.md).
+
 ## Run it
 
 Needs Node 20 or newer.
@@ -54,8 +57,9 @@ and as a green crosshair on the sheet.
 Open **Settings** and set:
 
 - **Host**: defaults to `plotter.local`. FluidNC's default hostname is `fluidnc`, so
-  either run `$Hostname=plotter` on the controller once (then restart it) or type its
-  current name or IP address here.
+  either run `$Hostname=plotter` on the controller once (then restart it; see
+  [firmware/README.md](firmware/README.md#wifi-and-hostname)) or type its current name
+  or IP address here.
 - **WebSocket port**: `80` for FluidNC v4.x (the current release line). Use `81` for v3.x.
 - **WebSocket path**: `/`.
 
@@ -154,6 +158,5 @@ abort on `error:`, and reconnect after the server restarts.
 
 ## Not done yet
 
-FluidNC `config.yaml` (pins, 80 steps/mm for GT2 + 20T pulleys at 16x microstepping, the
-RC servo on Z), hosting the app on the ESP32, multiple pens or widths, and
-image/SVG-to-line tracing.
+Limit switches and homing (the config has the steps for adding them), hosting the app
+on the ESP32, multiple pens or widths, and image/SVG-to-line tracing.
