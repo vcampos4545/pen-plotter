@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pen Plotter</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>Pen Plotter</h1>
+      <div id="conn" class="conn" data-state="disconnected" role="status" aria-live="polite">
+        <span class="dot"></span>
+        <span id="conn-label" class="conn-label">Disconnected</span>
+        <span id="conn-detail" class="conn-detail"></span>
+      </div>
+      <div id="machine-status" class="machine-status">Machine: unknown</div>
+      <button id="connect-btn" type="button">Connect</button>
+    </header>
+
+    <main class="layout">
+      <nav class="toolbar" aria-label="Drawing tools">
+        <div class="group" role="radiogroup" aria-label="Tool">
+          <button type="button" class="tool" data-tool="freehand" title="Freehand pen (P)">✎<span>Pen</span></button>
+          <button type="button" class="tool" data-tool="line" title="Straight line (L), Shift snaps to 15°">╱<span>Line</span></button>
+          <button type="button" class="tool" data-tool="rect" title="Rectangle (R), Shift for square">▭<span>Rect</span></button>
+          <button type="button" class="tool" data-tool="ellipse" title="Ellipse (O), Shift for circle">◯<span>Ellipse</span></button>
+          <button type="button" class="tool" data-tool="eraser" title="Eraser: deletes whole strokes (E)">⌫<span>Eraser</span></button>
+        </div>
+        <div class="group">
+          <button type="button" id="undo-btn" title="Undo (Ctrl/Cmd+Z)">↶<span>Undo</span></button>
+          <button type="button" id="redo-btn" title="Redo (Ctrl/Cmd+Shift+Z)">↷<span>Redo</span></button>
+          <button type="button" id="clear-btn" title="Clear the drawing">🗑<span>Clear</span></button>
+        </div>
+        <div class="group">
+          <button type="button" id="import-btn" title="Import an SVG or JSON drawing">⇪<span>Import</span></button>
+          <button type="button" id="export-svg-btn" title="Export the drawing as SVG">⇩<span>SVG</span></button>
+          <button type="button" id="export-json-btn" title="Export the drawing as JSON">⇩<span>JSON</span></button>
+          <input type="file" id="import-file" accept=".svg,.json,image/svg+xml,application/json" hidden />
+        </div>
+      </nav>
+
+      <section class="stage">
+        <canvas id="canvas" aria-label="Drawing canvas"></canvas>
+        <div id="cursor-pos" class="cursor-pos"></div>
+      </section>
+
+      <aside class="side">
+        <section class="panel">
+          <button type="button" id="send-btn" class="send" disabled>Send to Plotter</button>
+          <p id="send-hint" class="hint">Connect to the plotter to send.</p>
+          <button type="button" id="download-btn">Download G-code</button>
+          <div id="bounds-warning" class="warn" hidden></div>
+          <dl id="stats" class="stats"></dl>
+          <label class="check"><input type="checkbox" id="show-travel" /> Show pen-up moves</label>
+        </section>
+
+        <section class="panel">
+          <h2>Job</h2>
+          <progress id="job-progress" max="100" value="0"></progress>
+          <div id="job-text" class="job-text">No job running.</div>
+          <div class="row">
+            <button type="button" id="pause-btn" disabled>Pause</button>
+            <button type="button" id="resume-btn" disabled>Resume</button>
+            <button type="button" id="stop-btn" class="danger" disabled>Stop</button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Machine</h2>
+          <div class="row">
+            <button type="button" id="unlock-btn" class="machine-cmd" title="Clear an alarm ($X)">Unlock</button>
+            <button type="button" id="penup-btn" class="machine-cmd">Pen up</button>
+            <button type="button" id="pendown-btn" class="machine-cmd">Pen down</button>
+            <button type="button" id="home-btn" class="machine-cmd" title="Pen up, then move to X0 Y0">To origin</button>
+          </div>
+          <pre id="console" class="console" aria-label="Machine console"></pre>
+          <form id="console-form" class="console-form">
+            <input id="console-input" type="text" placeholder="Send a command, e.g. $X or G0 X10" autocomplete="off" spellcheck="false" />
+            <button type="submit" class="machine-cmd">Send</button>
+          </form>
+        </section>
+
+        <details class="panel" id="settings-panel">
+          <summary>Settings</summary>
+          <form id="settings-form" class="settings"></form>
+          <button type="button" id="reset-settings-btn">Reset to defaults</button>
+        </details>
+      </aside>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
