@@ -216,12 +216,27 @@ It does matter if the UART link fails, because the driver then falls back to Vre
 (see the previous section). Setting the pot to a safe value, as described in the
 fallback below, is cheap insurance.
 
-### Find the motor's rating
+### This machine's motors
 
-1. **Model number.** Look for a label on the motor body, for example `17HS4401`. Search
-   for the model plus "datasheet". The rated current is given per phase in amps, for
-   example 17HS4401 is commonly listed at 1.7 A. Different sellers reuse model
-   numbers, so prefer the seller's or maker's own sheet.
+Both axes use a **17HE15-1504S**, rated **1.5 A per phase** (datasheet).
+`config.yaml` sets `run_amps: 1.0` (about 70% of 1.5 A) and `hold_amps: 0.5` on both
+axes. That leaves headroom below the rating, so the motors run cooler and a TMC2209
+module with a heatsink handles it comfortably. Fit the heatsinks that usually come
+with the modules.
+
+Check the result with the tuning steps below. At 1.0 A neither axis should skip at the
+default speeds. If one does, look for mechanical binding or lower
+`acceleration_mm_per_sec2` before raising the current further. Do not go above
+1.5 A.
+
+### If you use a different motor
+
+#### Find its rating
+
+1. **Model number.** Look for a label on the motor body, for example `17HE15-1504S`.
+   Search for the model plus "datasheet". The rated current is given per phase in
+   amps. Different sellers reuse model numbers, so prefer the seller's or maker's own
+   sheet.
 2. **Coil resistance, as a rough guide.** Unplug the motor. Short the multimeter
    leads and note the reading, then measure across one coil pair and subtract it.
    Lower resistance usually means a higher rated current:
@@ -234,18 +249,14 @@ fallback below, is cheap insurance.
 
    This is only an indicator. Treat it as an upper bound, not a target.
 
-The config comment says to set `run_amps` to about **70% of the motor's rated
-current**. A 1.7 A motor would get about 1.2 A. A plotter rarely needs that much.
+Set `run_amps` to about **70% of the motor's rated current** and `hold_amps` to about
+half of that. If the rating can't be found, start at 0.6 A RMS, which is safe for most
+NEMA 17s, and tune upward.
 
-### Tune it
+#### Tune it
 
-`config.yaml` ships with `run_amps: 0.6` and `hold_amps: 0.3` on both axes. 0.6 A RMS is
-safe for most NEMA 17s and usually enough to move a pen carriage and a light tray. A few
-small or high-resistance NEMA 17s are rated below 0.85 A. If yours is, start at 70% of
-its rating instead.
-
-1. Start at 0.6 A. Jog each axis at working speed: `$J=G91 G21 X100 F6000`, then
-   `$J=G91 G21 X-100 F6000` (same for Y).
+1. Start at the value above. Jog each axis at working speed:
+   `$J=G91 G21 X100 F6000`, then `$J=G91 G21 X-100 F6000` (same for Y).
 2. Check for skipped steps: mark the carriage's position, run a back-and-forth jog
    several times, and see whether it lands on the mark. A skip often sounds like a
    clunk or a buzz. Also run a real drawing and check that it closes up.
@@ -254,8 +265,9 @@ its rating instead.
    `max_rate_mm_per_min` or `acceleration_mm_per_sec2` instead, or look for mechanical
    binding.
 4. Check temperature after 10 minutes of drawing. Warm is fine, and so is hot as long
-   as you can keep a finger on it for a few seconds. If you can't, lower the current. The drivers should not be too hot to touch either. Add a
-   heatsink or a fan if they are.
+   as you can keep a finger on it for a few seconds. If you can't, lower the current.
+   The drivers should not be too hot to touch either. Add a heatsink or a fan if they
+   are.
 5. `hold_amps` can stay at about half of `run_amps`.
 
 ### Fallback: setting Vref (standalone or non-UART use)
@@ -271,8 +283,8 @@ in case the UART link fails.
 
    **Vref = I_rms × 1.41**
 
-   So 0.6 A needs Vref ≈ 0.85 V, and 0.8 A needs about 1.13 V. For other sense
-   resistors, Vref = I_rms × 1.41 × 2.5 × (R_sense + 0.02) / 0.325.
+   So this machine's 1.0 A needs Vref ≈ 1.41 V, and 0.6 A needs about 0.85 V. For
+   other sense resistors, Vref = I_rms × 1.41 × 2.5 × (R_sense + 0.02) / 0.325.
 3. **Measure.** Power the driver with 12 V on VM and 3.3 V on VIO, with no motor
    connected or the motor idle. Put the multimeter's black probe on GND and the red
    probe on the potentiometer's metal top (or the Vref pad if the module has one).
@@ -366,8 +378,8 @@ and enum values, but not whether a GPIO exists on your board.
   board's pinout.
 - **Drivers.** Generic StepStick-format TMC2209 modules with 0.11 Ω sense resistors and
   an active-low EN pin. Check `r_sense_ohms` against your module.
-- **Motors.** 1.8° (200 steps/rev) NEMA 17s. The rated current is unknown, so both
-  axes start at 0.6 A RMS.
+- **Motors.** 17HE15-1504S on both axes: 1.8° (200 steps/rev) NEMA 17, rated 1.5 A
+  per phase. Both axes run at 1.0 A RMS and hold at 0.5 A.
 - **Mechanics.** GT2 belts on 20-tooth pulleys directly on the motor shafts, no
   gearing. About 400 mm of travel on each axis. Change `max_travel_mm` to match your
   frame.

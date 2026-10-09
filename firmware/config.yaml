@@ -93,13 +93,13 @@ axes:
         addr: 0
         # Sense resistor on most TMC2209 modules (BigTreeTech, FYSETC, MKS). Check yours.
         r_sense_ohms: 0.11
-        # SET TO ~70% OF YOUR MOTOR'S RATED CURRENT. The rating is unknown, so this
-        # starts at a conservative 0.6 A RMS, safe for most NEMA 17s. Raise it
-        # in 0.1 A steps only if the axis skips (README: "Setting motor current").
+        # SET TO ~70% OF YOUR MOTOR'S RATED CURRENT. Motor: 17HE15-1504S, rated
+        # 1.5 A per phase, so 1.0 A RMS. Never go above 1.5 A. For a different
+        # motor see README "Setting motor current".
         # Set over UART, so the driver's Vref potentiometer is ignored.
-        run_amps: 0.6
+        run_amps: 1.0
         # Current while standing still. Half of run_amps is plenty for a plotter.
-        hold_amps: 0.3
+        hold_amps: 0.5
         # Must match the 16 used in steps_per_mm above.
         microsteps: 16
         run_mode: StealthChop
@@ -130,9 +130,9 @@ axes:
         uart_num: 1
         addr: 1
         r_sense_ohms: 0.11
-        # SET TO ~70% OF YOUR MOTOR'S RATED CURRENT. See X.
-        run_amps: 0.6
-        hold_amps: 0.3
+        # SET TO ~70% OF YOUR MOTOR'S RATED CURRENT. Same 17HE15-1504S as X.
+        run_amps: 1.0
+        hold_amps: 0.5
         microsteps: 16
         run_mode: StealthChop
         homing_mode: StealthChop
