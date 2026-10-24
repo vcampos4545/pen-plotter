@@ -38,6 +38,9 @@
           <button type="button" id="export-json-btn" title="Export the drawing as JSON">⇩<span>JSON</span></button>
           <input type="file" id="import-file" accept=".svg,.json,image/svg+xml,application/json" hidden />
         </div>
+        <div class="group">
+          <button type="button" id="topo-btn" title="Contour lines from a box on the world map">⛰<span>Topo</span></button>
+        </div>
       </nav>
 
       <section class="stage">
@@ -88,6 +91,67 @@
         </details>
       </aside>
     </main>
+
+    <dialog id="topo-dialog" class="topo-dialog" aria-labelledby="topo-title">
+      <header class="topo-head">
+        <h2 id="topo-title">Topographic lines</h2>
+        <p class="hint">Find a place, press <b>Select area</b> (or hold Shift) and drag a box on the map.</p>
+        <button type="button" id="topo-close" aria-label="Close">✕</button>
+      </header>
+      <div class="topo-body">
+        <div class="topo-mapwrap">
+          <div id="topo-map" class="topo-map"></div>
+          <div id="topo-map-warning" class="warn topo-map-warning" hidden></div>
+        </div>
+        <div class="topo-side">
+          <div class="row">
+            <button type="button" id="topo-select" aria-pressed="false">▭ Select area</button>
+            <label class="check" title="Lock the box to the drawable area's shape so the contours fill the sheet"
+              ><input type="checkbox" id="topo-lock" checked /> Match paper shape</label
+            >
+          </div>
+          <p id="topo-box" class="hint">No area selected.</p>
+          <form id="topo-form" class="settings">
+            <label for="topo-mode">Contours</label>
+            <select id="topo-mode" name="mode">
+              <option value="interval">Every N m</option>
+              <option value="count">N levels</option>
+            </select>
+            <label for="topo-value" id="topo-value-label">Interval (m)</label>
+            <input type="number" id="topo-value" name="value" min="0.1" step="any" />
+            <label for="topo-smoothing">Smoothing (blur passes)</label>
+            <input type="number" id="topo-smoothing" name="smoothing" min="0" max="20" step="1" />
+            <label for="topo-simplify">Simplify (mm)</label>
+            <input type="number" id="topo-simplify" name="simplify" min="0" step="0.05" />
+            <label for="topo-minlength">Drop lines shorter than (mm)</label>
+            <input type="number" id="topo-minlength" name="minLength" min="0" step="0.5" />
+          </form>
+          <div id="topo-status" class="job-text" role="status" aria-live="polite"></div>
+          <div class="topo-preview-wrap"><canvas id="topo-preview" aria-label="Preview of the contours on the sheet"></canvas></div>
+          <div class="row topo-actions">
+            <button type="button" id="topo-retry" hidden>Retry download</button>
+            <button type="button" id="topo-insert" class="send" disabled>Add to drawing</button>
+            <button type="button" id="topo-cancel">Cancel</button>
+          </div>
+          <details class="hint topo-credits">
+            <summary>Elevation data sources</summary>
+            <p>
+              Elevation from the <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noopener">AWS Terrain Tiles</a>.
+              ArcticDEM terrain data DEM(s) were created from DigitalGlobe, Inc., imagery and funded under National Science
+              Foundation awards 1043681, 1559691, and 1542736; Australia terrain data © Commonwealth of Australia (Geoscience
+              Australia) 2017; Austria terrain data © offene Daten Österreichs, Digitales Geländemodell (DGM) Österreich; Canada
+              terrain data contains information licensed under the Open Government Licence, Canada; Europe terrain data produced
+              using Copernicus data and information funded by the European Union, EU-DEM layers; Global ETOPO1 terrain data U.S.
+              National Oceanic and Atmospheric Administration; Mexico terrain data source: INEGI, Continental relief, 2016; New
+              Zealand terrain data Copyright 2011 Crown copyright (c) Land Information New Zealand and the New Zealand Government
+              (All rights reserved); Norway terrain data © Kartverket; United Kingdom terrain data © Environment Agency copyright
+              and/or database right 2015. All rights reserved; United States 3DEP (formerly NED) and global GMTED2010 and SRTM
+              terrain data courtesy of the U.S. Geological Survey.
+            </p>
+          </details>
+        </div>
+      </div>
+    </dialog>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

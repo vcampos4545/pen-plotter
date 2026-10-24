@@ -523,12 +523,33 @@ $<HTMLInputElement>('import-file').addEventListener('change', async (e) => {
   }
 });
 
+// ---- topo ---------------------------------------------------------------
+
+$('topo-btn').addEventListener('click', async () => {
+  try {
+    const { openTopo } = await import('./topo-ui');
+    openTopo({
+      area,
+      paper: () => ({
+        width: settings.paperWidth,
+        height: settings.paperHeight,
+        margin: settings.margin,
+        origin: fromMachine({ x: 0, y: 0 }, settings),
+      }),
+      strokes: () => drawing.strokes.map((s) => s.points),
+      insert: (lines) => drawing.addMany(lines.map((points) => ({ id: newId(), kind: 'freehand', points }))),
+    });
+  } catch (err) {
+    alert(`Could not open the Topo map: ${(err as Error).message}`);
+  }
+});
+
 // ---- keyboard -----------------------------------------------------------
 
 const TOOL_KEYS: Record<string, Tool> = { p: 'freehand', l: 'line', r: 'rect', o: 'ellipse', e: 'eraser' };
 window.addEventListener('keydown', (e) => {
   const target = e.target as HTMLElement;
-  if (target.closest('input, select, textarea')) return;
+  if (target.closest('input, select, textarea, dialog')) return;
   const mod = e.metaKey || e.ctrlKey;
   if (mod && e.key.toLowerCase() === 'z') {
     e.preventDefault();

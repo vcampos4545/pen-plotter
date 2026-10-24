@@ -30,6 +30,16 @@ describe('Drawing history', () => {
     expect(changes).toBe(8);
   });
 
+  it('addMany is one undo step', () => {
+    const d = new Drawing([s('a', [[1, 1]])]);
+    d.addMany([s('b', [[2, 2]]), s('c', [[3, 3]])]);
+    expect(d.strokes.map((x) => x.id)).toEqual(['a', 'b', 'c']);
+    d.undo();
+    expect(d.strokes.map((x) => x.id)).toEqual(['a']);
+    d.addMany([]);
+    expect(d.canRedo).toBe(true);
+  });
+
   it('removing nothing is not an undo step', () => {
     const d = new Drawing([s('a', [[1, 1]])]);
     d.remove(['zzz']);

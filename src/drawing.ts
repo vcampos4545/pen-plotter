@@ -57,6 +57,11 @@ export class Drawing {
     this.commit([...this.current, stroke]);
   }
 
+  /** Append several strokes as one undo step. No-op if empty. */
+  addMany(strokes: Stroke[]): void {
+    if (strokes.length > 0) this.commit([...this.current, ...strokes]);
+  }
+
   /** Remove strokes by id as one undo step. No-op if none match. */
   remove(ids: Iterable<string>): void {
     const drop = new Set(ids);

@@ -30,6 +30,8 @@ npm run build      # typecheck and production build into dist/
 - The drawing is saved in localStorage on every change. Use **SVG** / **JSON** to
   export and **Import** to load them back. SVG import accepts `polyline`, `polygon`,
   `line` and straight-segment `path` elements; curves are rejected.
+- **Topo** opens a world map for drawing contour lines of real terrain. See
+  [Topo lines](#topo-lines) below.
 - **Send to Plotter** runs flatten → simplify → optimize → G-code → stream. It is
   disabled unless the indicator says Connected and the drawing is inside the margin.
   **Download G-code** saves the same program to a file.
@@ -38,6 +40,71 @@ npm run build      # typecheck and production build into dist/
 - **Job** shows lines sent and acknowledged and a percentage, with Pause, Resume and Stop.
 - **Machine** has Unlock (`$X`), Pen up/down, To origin, and a console for one-off commands.
   These are disabled while a job runs.
+
+### Topo lines
+
+1. Press **Topo**. Pan and zoom the map to a place.
+2. Press **Select area** (or hold Shift) and drag a box. The elevation for the box
+   downloads and the contours appear in the preview on the right, in blue on top of
+   the current drawing.
+3. Adjust the controls. The preview updates without downloading again.
+   - **Contours**: a line every N metres, or N evenly spaced levels. When a new area
+     would get fewer than 3 or more than 250 lines at the current interval, the
+     interval is reset to a round number giving about 20.
+   - **Smoothing**: blur passes over the elevation before contouring. More passes give
+     calmer lines and fewer tiny loops.
+   - **Simplify**: point reduction tolerance on the paper, in mm.
+   - **Drop lines shorter than**: fragments below this length on the paper are left out
+     so the plotter does not spend time on noise.
+4. Press **Add to drawing**. The contours become ordinary strokes, added as one undo
+   step, so undo, export, the planner, stats and Send treat them like anything drawn
+   by hand.
+
+**Match paper shape** (on by default) locks the box to the shape of the drawable area,
+measured on the ground, so the contours fill the sheet. Turn it off to select any
+shape. The contours are always fitted inside the margin at the box's true proportions:
+east-west distance is scaled by the cosine of the box's middle latitude, so a box far
+from the equator is not stretched sideways. Large or very wide boxes leave unused paper
+when the lock is off.
+
+Elevation comes from the [AWS Terrain Tiles](https://registry.opendata.aws/terrain-tiles/)
+(Terrarium PNG tiles, no key needed). The zoom level is chosen so the box's longer side
+covers at least 400 source pixels, capped at 16 tiles per box and zoom 15. The elevation
+is resampled to a grid of 300 samples on the box's longer side and contoured with
+marching squares. A Topo session needs an internet connection; a failed download says
+which tile failed and offers **Retry download**. An area with no contours at the chosen
+settings (flat ground, or an interval larger than the elevation range) says so instead
+of adding nothing silently.
+
+The tested parts are `src/terrain.ts` (tile math, Terrarium decoding, stitching,
+resampling, the aspect lock), `src/contour.ts` (smoothing, levels, marching squares)
+and `src/topo.ts` (fitting to the paper and dropping fragments). `src/topo-ui.ts` is the
+dialog and map wiring and loads only when **Topo** is first opened.
+
+**Attribution.** The map's corner credits OpenStreetMap and the Terrain Tiles, and
+**Elevation data sources** under the dialog's buttons holds the full terrain credit:
+
+- Map tiles and data © [OpenStreetMap](https://www.openstreetmap.org/copyright)
+  contributors.
+- Elevation from the Terrain Tiles. Their
+  [required attribution](https://github.com/tilezen/joerd/blob/master/docs/attribution.md)
+  is: ArcticDEM terrain data DEM(s) were created from DigitalGlobe, Inc., imagery and
+  funded under National Science Foundation awards 1043681, 1559691, and 1542736;
+  Australia terrain data © Commonwealth of Australia (Geoscience Australia) 2017;
+  Austria terrain data © offene Daten Österreichs, Digitales Geländemodell (DGM)
+  Österreich; Canada terrain data contains information licensed under the Open
+  Government Licence, Canada; Europe terrain data produced using Copernicus data and
+  information funded by the European Union, EU-DEM layers; Global ETOPO1 terrain data
+  U.S. National Oceanic and Atmospheric Administration; Mexico terrain data source:
+  INEGI, Continental relief, 2016; New Zealand terrain data Copyright 2011 Crown
+  copyright (c) Land Information New Zealand and the New Zealand Government (All rights
+  reserved); Norway terrain data © Kartverket; United Kingdom terrain data ©
+  Environment Agency copyright and/or database right 2015. All rights reserved; United
+  States 3DEP (formerly NED) and global GMTED2010 and SRTM terrain data courtesy of the
+  U.S. Geological Survey.
+
+The map tiles come from `tile.openstreetmap.org`, which is fine for this kind of light
+personal use under the [tile usage policy](https://operations.osmfoundation.org/policies/tiles/).
 
 ### Connection indicator
 

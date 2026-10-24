@@ -12,6 +12,8 @@ export interface Scene {
   strokes: Polyline[];
   /** Shape or stroke being drawn right now. */
   preview?: Polyline;
+  /** Strokes about to be added (e.g. generated contours), drawn like the preview. */
+  previewStrokes?: Polyline[];
   /** Pen-up moves, each a 2-point segment, in drawing order. */
   travel?: Polyline[];
   /** Eraser cursor, in mm. */
@@ -131,8 +133,12 @@ export class CanvasView {
       this.path(st);
       ctx.stroke();
     }
+    ctx.strokeStyle = '#2563eb';
+    for (const st of scene.previewStrokes ?? []) {
+      this.path(st);
+      ctx.stroke();
+    }
     if (scene.preview) {
-      ctx.strokeStyle = '#2563eb';
       this.path(scene.preview);
       ctx.stroke();
     }
