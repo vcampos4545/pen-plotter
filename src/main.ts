@@ -523,25 +523,54 @@ $<HTMLInputElement>('import-file').addEventListener('change', async (e) => {
   }
 });
 
-// ---- topo ---------------------------------------------------------------
+// ---- topo and photo -----------------------------------------------------
+
+// What the generator dialogs need from the app: the sheet, the drawing, and a
+// way to add their lines as one undo step.
+const sheetHost = {
+  area,
+  paper: () => ({
+    width: settings.paperWidth,
+    height: settings.paperHeight,
+    margin: settings.margin,
+    origin: fromMachine({ x: 0, y: 0 }, settings),
+  }),
+  machine: () => settings,
+  strokes: () => drawing.strokes.map((s) => s.points),
+  insert: (lines: Polyline[]) => drawing.addMany(lines.map((points) => ({ id: newId(), kind: 'freehand', points }))),
+};
 
 $('topo-btn').addEventListener('click', async () => {
   try {
     const { openTopo } = await import('./topo-ui');
-    openTopo({
-      area,
-      paper: () => ({
-        width: settings.paperWidth,
-        height: settings.paperHeight,
-        margin: settings.margin,
-        origin: fromMachine({ x: 0, y: 0 }, settings),
-      }),
-      strokes: () => drawing.strokes.map((s) => s.points),
-      insert: (lines) => drawing.addMany(lines.map((points) => ({ id: newId(), kind: 'freehand', points }))),
-    });
+    openTopo(sheetHost);
   } catch (err) {
     alert(`Could not open the Topo map: ${(err as Error).message}`);
   }
+});
+
+async function openPhotoDialog(file?: File): Promise<void> {
+  try {
+    const { openPhoto } = await import('./photo-ui');
+    openPhoto(sheetHost, file);
+  } catch (err) {
+    alert(`Could not open the Photo tool: ${(err as Error).message}`);
+  }
+}
+$('photo-btn').addEventListener('click', () => void openPhotoDialog());
+// Dropping an image on the sheet opens the Photo tool with it.
+const stage = canvas.parentElement!;
+stage.addEventListener('dragover', (e) => {
+  if (!Array.from(e.dataTransfer?.types ?? []).includes('Files')) return;
+  e.preventDefault();
+  e.dataTransfer!.dropEffect = 'copy';
+});
+stage.addEventListener('drop', (e) => {
+  const file = e.dataTransfer?.files[0];
+  if (!file) return;
+  e.preventDefault();
+  if (file.type.startsWith('image/') && file.type !== 'image/svg+xml') void openPhotoDialog(file);
+  else alert('Drop a JPEG, PNG or WebP photo here to trace it. Use Import for SVG and JSON drawings.');
 });
 
 // ---- keyboard -----------------------------------------------------------

@@ -32,6 +32,9 @@ npm run build      # typecheck and production build into dist/
   `line` and straight-segment `path` elements; curves are rejected.
 - **Topo** opens a world map for drawing contour lines of real terrain. See
   [Topo lines](#topo-lines) below.
+- **Photo** turns a photo into lines: squiggles, a spiral, hatching, outlines or TSP
+  art. See [Photo to lines](#photo-to-lines) below. Dropping a photo on the sheet
+  opens it too.
 - **Send to Plotter** runs flatten → simplify → optimize → G-code → stream. It is
   disabled unless the indicator says Connected and the drawing is inside the margin.
   **Download G-code** saves the same program to a file.
@@ -105,6 +108,45 @@ dialog and map wiring and loads only when **Topo** is first opened.
 
 The map tiles come from `tile.openstreetmap.org`, which is fine for this kind of light
 personal use under the [tile usage policy](https://operations.osmfoundation.org/policies/tiles/).
+
+### Photo to lines
+
+1. Press **Photo**, then **Choose photo…** or drop a JPEG, PNG or WebP on the dialog
+   (or on the sheet). The image is decoded in the browser and never uploaded.
+2. Pick a **Style** and **Framing**. **Crop to fill** cuts the photo to the shape of
+   the drawable area so the lines fill the sheet; **Fit whole photo** keeps all of it
+   and leaves margins. The thumbnail shows the photo as the generator sees it.
+3. Adjust **Brightness**, **Contrast** and **Gamma** (above 1 lightens mid-tones), or
+   tick **Invert**. Then tune the style:
+   - **Squiggle lines**: rows across the sheet whose wave grows taller and tighter
+     where the photo is darker. *Rows*, *Max amplitude* (× the row gap; 0.5 lets
+     neighbouring rows touch) and *Frequency* (waves per mm at full black).
+   - **Spiral**: one line from the centre out to the largest circle that fits, with a
+     radial wobble in dark areas. The pen never lifts. *Ring spacing*, *Max amplitude*
+     (× spacing) and *Frequency*.
+   - **Hatching**: straight lines at *Line spacing* and *Angle*. Each of the 1 to 4
+     *Layers* adds a direction (+90°, +45°, −45°) where the photo is darker than its
+     threshold (evenly spaced, e.g. 25%, 50%, 75% for three layers).
+   - **Outline**: Canny-style edge detection (blur, Sobel, thin edges, hysteresis)
+     traced into lines. *Smoothing* blurs first, a higher *Edge threshold* keeps only
+     strong edges, and *Drop lines shorter than* removes specks.
+   - **TSP art**: *Points* stipples placed by darkness (weighted Lloyd relaxation),
+     joined into one continuous path by a nearest-neighbour tour improved with 2-opt.
+     *Time limit* caps stippling plus path optimization.
+4. The preview shows the lines in blue on the sheet, with the line count, points,
+   pen-down length, an approximate pen-up distance and draw time. A warning appears
+   for jobs over 2 hours, drawings too big to autosave (over 200,000 points: export
+   JSON to keep them) and more than 8,000 separate lines (slow path planning).
+5. Press **Add to drawing**. The lines become ordinary strokes, added as one undo step.
+
+Lines are generated in a Web Worker, so the dialog stays responsive while TSP runs.
+The photo is scaled to at most 640 pixels on its longer side for processing. The
+settings are remembered; the photo is not. The tested parts are `src/tone.ts`
+(luminance, tone adjustments, sampling), `src/photo-styles.ts` (squiggle, spiral,
+hatching), `src/edges.ts` (edge detection and tracing), `src/stipple.ts` (stippling,
+tour and line ordering) and `src/photo.ts` (framing, options, the pipeline and the
+estimate). `src/photo-ui.ts` is the dialog wiring and loads only when **Photo** is
+first opened.
 
 ### Connection indicator
 
@@ -226,4 +268,4 @@ abort on `error:`, and reconnect after the server restarts.
 ## Not done yet
 
 Limit switches and homing (the config has the steps for adding them), hosting the app
-on the ESP32, multiple pens or widths, and image/SVG-to-line tracing.
+on the ESP32, multiple pens or widths, colour separation, and SVG curve import.
