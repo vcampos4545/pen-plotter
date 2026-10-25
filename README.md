@@ -30,8 +30,8 @@ npm run build      # typecheck and production build into dist/
 - The drawing is saved in localStorage on every change. Use **SVG** / **JSON** to
   export and **Import** to load them back. SVG import accepts `polyline`, `polygon`,
   `line` and straight-segment `path` elements; curves are rejected.
-- **Topo** opens a world map for drawing contour lines of real terrain. See
-  [Topo lines](#topo-lines) below.
+- **Topo** opens a world map for drawing contour lines or ridgelines of real terrain.
+  See [Topo lines](#topo-lines) and [Ridgelines](#ridgelines) below.
 - **Photo** turns a photo into lines: squiggles, a spiral, hatching, outlines or TSP
   art. See [Photo to lines](#photo-to-lines) below. Dropping a photo on the sheet
   opens it too.
@@ -50,7 +50,8 @@ npm run build      # typecheck and production build into dist/
 2. Press **Select area** (or hold Shift) and drag a box. The elevation for the box
    downloads and the contours appear in the preview on the right, in blue on top of
    the current drawing.
-3. Adjust the controls. The preview updates without downloading again.
+3. Adjust the controls. The preview updates without downloading again. **Style**
+   switches between contour lines and [ridgelines](#ridgelines) on the same area.
    - **Contours**: a line every N metres, or N evenly spaced levels. When a new area
      would get fewer than 3 or more than 250 lines at the current interval, the
      interval is reset to a round number giving about 20.
@@ -62,6 +63,9 @@ npm run build      # typecheck and production build into dist/
 4. Press **Add to drawing**. The contours become ordinary strokes, added as one undo
    step, so undo, export, the planner, stats and Send treat them like anything drawn
    by hand.
+
+Under the controls the dialog shows the elevation range, the line and point count, the
+pen-down and pen-up distance and an estimate of the drawing time at the current feeds.
 
 **Match paper shape** (on by default) locks the box to the shape of the drawable area,
 measured on the ground, so the contours fill the sheet. Turn it off to select any
@@ -108,6 +112,40 @@ dialog and map wiring and loads only when **Topo** is first opened.
 
 The map tiles come from `tile.openstreetmap.org`, which is fine for this kind of light
 personal use under the [tile usage policy](https://operations.osmfoundation.org/policies/tiles/).
+
+### Ridgelines
+
+Stacked horizontal elevation profiles, like the *Unknown Pleasures* album cover but made
+of real mountains.
+
+1. Press **Topo**, select an area as for [Topo lines](#topo-lines), and set **Style** to
+   **Ridgelines**. A box around one massif or a single valley reads best.
+2. Adjust the controls. The preview updates live.
+   - **Number of lines**: profiles drawn across the area, evenly spaced from its north
+     edge (the back, at the top of the sheet) to its south edge (the front). 2 to 300,
+     default 60.
+   - **Height (line gaps)**: how far the highest point in the area rises above its own
+     line, measured in gaps between lines. The status line shows what that means
+     against the real ground, e.g. "heights about ×1.2 true scale".
+   - **Flat baseline at the sides**: fades each profile down to a flat line over the
+     outer 15% of the width on each side, for the album-cover look. Off, the profiles
+     run edge to edge at their true elevation.
+   - **Smoothing**, **Simplify** and **Drop lines shorter than** work as for contours;
+     each style remembers its own values.
+3. Press **Add to drawing**.
+
+Hidden lines are removed: the profiles are drawn from the front of the area to the
+back, and each one is cut where it passes behind the skyline of the rows in front of
+it, so lines touch but never cross. A cut profile becomes separate strokes. Every
+profile shares one horizontal scale, set by the box's ground width, so the map's
+proportions hold across the sheet; the rows and the peaks of the back row are fitted
+inside the margin together, which leaves a little unused paper at the sides when
+**Match paper shape** is on. Simplify can move a line by up to its tolerance, so keep
+it small.
+
+The elevation is the same Terrain Tiles data as Topo lines, with the same attribution
+(see above). The tested part is `src/ridgeline.ts` (layout, sampling, the skyline clip
+and the options).
 
 ### Photo to lines
 

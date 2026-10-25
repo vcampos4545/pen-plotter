@@ -39,7 +39,7 @@
           <input type="file" id="import-file" accept=".svg,.json,image/svg+xml,application/json" hidden />
         </div>
         <div class="group">
-          <button type="button" id="topo-btn" title="Contour lines from a box on the world map">⛰<span>Topo</span></button>
+          <button type="button" id="topo-btn" title="Contour lines or ridgelines from a box on the world map">⛰<span>Topo</span></button>
           <button type="button" id="photo-btn" title="Turn a photo into lines">◐<span>Photo</span></button>
         </div>
       </nav>
@@ -107,19 +107,38 @@
         <div class="topo-side">
           <div class="row">
             <button type="button" id="topo-select" aria-pressed="false">▭ Select area</button>
-            <label class="check" title="Lock the box to the drawable area's shape so the contours fill the sheet"
+            <label class="check" title="Lock the box to the drawable area's shape so the lines fill the sheet"
               ><input type="checkbox" id="topo-lock" checked /> Match paper shape</label
             >
           </div>
           <p id="topo-box" class="hint">No area selected.</p>
           <form id="topo-form" class="settings">
-            <label for="topo-mode">Contours</label>
-            <select id="topo-mode" name="mode">
-              <option value="interval">Every N m</option>
-              <option value="count">N levels</option>
+            <label for="topo-style">Style</label>
+            <select id="topo-style" name="style">
+              <option value="contours">Contour lines</option>
+              <option value="ridges">Ridgelines</option>
             </select>
-            <label for="topo-value" id="topo-value-label">Interval (m)</label>
-            <input type="number" id="topo-value" name="value" min="0.1" step="any" />
+            <fieldset class="topo-style" data-style="contours">
+              <label for="topo-mode">Contours</label>
+              <select id="topo-mode" name="mode">
+                <option value="interval">Every N m</option>
+                <option value="count">N levels</option>
+              </select>
+              <label for="topo-value" id="topo-value-label">Interval (m)</label>
+              <input type="number" id="topo-value" name="value" min="0.1" step="any" />
+            </fieldset>
+            <fieldset class="topo-style" data-style="ridges" hidden>
+              <label for="topo-ridge-lines">Number of lines</label>
+              <input type="number" id="topo-ridge-lines" name="ridge.lines" min="2" max="300" step="1" />
+              <label for="topo-ridge-height" title="How far the highest point rises above its own line, in gaps between lines"
+                >Height (line gaps)</label
+              >
+              <input type="number" id="topo-ridge-height" name="ridge.height" min="0" max="100" step="0.5" />
+              <label for="topo-ridge-baseline" title="Fade each line to a flat baseline near the left and right edges"
+                >Flat baseline at the sides</label
+              >
+              <input type="checkbox" id="topo-ridge-baseline" name="ridge.baseline" />
+            </fieldset>
             <label for="topo-smoothing">Smoothing (blur passes)</label>
             <input type="number" id="topo-smoothing" name="smoothing" min="0" max="20" step="1" />
             <label for="topo-simplify">Simplify (mm)</label>
@@ -128,7 +147,7 @@
             <input type="number" id="topo-minlength" name="minLength" min="0" step="0.5" />
           </form>
           <div id="topo-status" class="job-text" role="status" aria-live="polite"></div>
-          <div class="topo-preview-wrap"><canvas id="topo-preview" aria-label="Preview of the contours on the sheet"></canvas></div>
+          <div class="topo-preview-wrap"><canvas id="topo-preview" aria-label="Preview of the lines on the sheet"></canvas></div>
           <div class="row topo-actions">
             <button type="button" id="topo-retry" hidden>Retry download</button>
             <button type="button" id="topo-insert" class="send" disabled>Add to drawing</button>

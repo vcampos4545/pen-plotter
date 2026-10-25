@@ -560,11 +560,13 @@ progress {
   font-variant-numeric: tabular-nums;
 }
 
-fieldset.photo-style {
+fieldset.photo-style,
+fieldset.topo-style {
   display: contents;
 }
 
-fieldset.photo-style[hidden] {
+fieldset.photo-style[hidden],
+fieldset.topo-style[hidden] {
   display: none;
 }
 

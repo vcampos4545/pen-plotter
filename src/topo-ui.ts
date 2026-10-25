@@ -2,6 +2,9 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { niceInterval } from './contour';
 import type { Point, Polyline, Rect } from './geometry';
+import { estimatePhoto } from './photo';
+import { buildRidges, sanitizeRidgeOptions, type RidgeOptions, type RidgeResult } from './ridgeline';
+import type { Settings } from './settings';
 import {
   boxFromCorners,
   chooseZoom,
@@ -20,14 +23,16 @@ import { terrariumLoader } from './terrain-fetch';
 import { buildTopo, DEFAULT_TOPO_OPTIONS, fitToArea, MAX_LEVELS, topoLevels, type TopoOptions, type TopoResult } from './topo';
 import { CanvasView } from './view';
 
-// DOM wiring for the Topo dialog: a world map to drag a box on, contour
-// controls and a preview of the sheet. Loaded on first use so the map library
+// DOM wiring for the Topo dialog: a world map to drag a box on, contour or
+// ridgeline controls and a preview of the sheet. Loaded on first use so the map library
 // and its tiles stay out of the main app.
 
 export interface TopoHost {
   /** Drawable area of the sheet, paper mm. */
   area(): Rect;
   paper(): { width: number; height: number; margin: number; origin: Point };
+  /** Feeds and dwell, for the time estimate. */
+  machine(): Pick<Settings, 'drawFeed' | 'travelFeed' | 'penDwell'>;
   /** The current drawing, shown under the preview. */
   strokes(): Polyline[];
   insert(lines: Polyline[]): void;
@@ -36,19 +41,26 @@ export interface TopoHost {
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const STORAGE_KEY = 'penplotter.topo.v1';
 
+/** Contour lines, or stacked horizontal elevation profiles. */
+type TopoStyle = 'contours' | 'ridges';
+
 interface Saved {
+  style: TopoStyle;
   options: TopoOptions;
+  ridge: RidgeOptions;
   center: [number, number];
   zoom: number;
 }
 
 function load(): Saved {
-  const fallback: Saved = { options: { ...DEFAULT_TOPO_OPTIONS }, center: [30, 10], zoom: 2 };
+  const fallback: Saved = { style: 'contours', options: { ...DEFAULT_TOPO_OPTIONS }, ridge: sanitizeRidgeOptions(null), center: [30, 10], zoom: 2 };
   try {
     const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null') as Partial<Saved> | null;
     if (!raw) return fallback;
     return {
+      style: raw.style === 'ridges' ? 'ridges' : 'contours',
       options: sanitizeOptions({ ...DEFAULT_TOPO_OPTIONS, ...raw.options }),
+      ridge: sanitizeRidgeOptions(raw.ridge),
       center: Array.isArray(raw.center) && raw.center.every(Number.isFinite) ? raw.center : fallback.center,
       zoom: Number.isFinite(raw.zoom) ? raw.zoom! : fallback.zoom,
     };
@@ -61,7 +73,7 @@ function save(): void {
   if (!map) return;
   const c = map.getCenter();
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ options, center: [c.lat, c.lng], zoom: map.getZoom() }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ style, options, ridge, center: [c.lat, c.lng], zoom: map.getZoom() }));
   } catch {
     // Storage full or disabled; settings just won't persist.
   }
@@ -84,7 +96,9 @@ function sanitizeOptions(o: Partial<TopoOptions>): TopoOptions {
 }
 
 const saved = load();
+let style = saved.style;
 let options = saved.options;
+let ridge = saved.ridge;
 let host: TopoHost;
 let map: L.Map | undefined;
 let rect: L.Rectangle | undefined;
@@ -93,6 +107,7 @@ let box: GeoBox | undefined;
 /** Elevation for `box`, once downloaded. */
 let grid: ElevationGrid | undefined;
 let result: TopoResult | undefined;
+let ridges: RidgeResult | undefined;
 let download: AbortController | undefined;
 let regenTimer: ReturnType<typeof setTimeout> | undefined;
 let preview: CanvasView | undefined;
@@ -108,6 +123,25 @@ function setStatus(text: string, failed = false): void {
 
 const km = (m: number) => (m >= 10000 ? `${(m / 1000).toFixed(0)} km` : m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${m.toFixed(0)} m`);
 const metres = (m: number) => `${Math.round(m).toLocaleString()} m`;
+const mm = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)} m` : `${n.toFixed(0)} mm`);
+function duration(sec: number): string {
+  const s = Math.round(sec);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  return m < 60 ? `${m}m ${s % 60}s` : `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
+/** Lines, pen distance and time, as the Photo dialog shows them. */
+function estimateText(lines: Polyline[]): string {
+  const e = estimatePhoto(lines, host.machine());
+  return (
+    `${e.lines.toLocaleString()} line${e.lines === 1 ? '' : 's'} · ${e.points.toLocaleString()} points\n` +
+    `Pen-down ${mm(e.drawLength)} · pen-up about ${mm(e.travel)} · about ${duration(e.seconds)} to draw`
+  );
+}
+
+/** The lines the current style would add. */
+const current = (): Polyline[] | undefined => (style === 'ridges' ? ridges?.lines : result?.lines);
 
 // ---- map ----------------------------------------------------------------
 
@@ -212,6 +246,7 @@ function selectBox(b: GeoBox): void {
   box = b;
   grid = undefined;
   result = undefined;
+  ridges = undefined;
   const g = groundSize(b);
   const z = chooseZoom(b);
   const tiles = tileCount(tileRange(b, z));
@@ -254,8 +289,11 @@ async function fetchElevation(): Promise<void> {
 
 // ---- contours -----------------------------------------------------------
 
+const field = (name: string) => form.elements.namedItem(name) as HTMLInputElement;
+const val = (name: string) => field(name).value;
+const readStyle = (): TopoStyle => (val('style') === 'ridges' ? 'ridges' : 'contours');
+
 function readForm(): TopoOptions {
-  const val = (name: string) => (form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement).value;
   return sanitizeOptions({
     mode: val('mode') as TopoOptions['mode'],
     value: Number(val('value')),
@@ -265,21 +303,40 @@ function readForm(): TopoOptions {
   });
 }
 
-function fillForm(): void {
-  const set = (name: string, v: string | number) => ((form.elements.namedItem(name) as HTMLInputElement).value = String(v));
-  set('mode', options.mode);
-  set('value', options.value);
-  set('smoothing', options.smoothing);
-  set('simplify', options.simplify);
-  set('minLength', options.minLength);
-  $('topo-value-label').textContent = options.mode === 'count' ? 'Number of levels' : 'Interval (m)';
+function readRidgeForm(): RidgeOptions {
+  return sanitizeRidgeOptions({
+    lines: Number(val('ridge.lines')),
+    height: Number(val('ridge.height')),
+    baseline: field('ridge.baseline').checked,
+    smoothing: Number(val('smoothing')),
+    simplify: Number(val('simplify')),
+    minLength: Number(val('minLength')),
+  });
 }
 
-/** Contour the cached grid with the current options. `fresh` is true right after a new area loads. */
+function fillForm(): void {
+  const set = (name: string, v: string | number) => (field(name).value = String(v));
+  set('style', style);
+  set('mode', options.mode);
+  set('value', options.value);
+  set('ridge.lines', ridge.lines);
+  set('ridge.height', ridge.height);
+  field('ridge.baseline').checked = ridge.baseline;
+  // Smoothing, simplify and the length filter are shared fields; each style keeps its own values.
+  const shared = style === 'ridges' ? ridge : options;
+  set('smoothing', shared.smoothing);
+  set('simplify', shared.simplify);
+  set('minLength', shared.minLength);
+  $('topo-value-label').textContent = options.mode === 'count' ? 'Number of levels' : 'Interval (m)';
+  for (const fs of Array.from(form.querySelectorAll<HTMLFieldSetElement>('fieldset.topo-style'))) fs.hidden = fs.dataset.style !== style;
+}
+
+/** Draw the cached grid with the current style and options. `fresh` is true right after a new area loads. */
 function regenerate(fresh = false): void {
   if (!grid || !box) return;
   let note = '';
   // A new area can make the last interval useless (100 m on a plain, 5 m on Everest).
+  // Checked in either style so switching to contours later starts from a sensible interval.
   if (fresh && options.mode === 'interval') {
     const n = topoLevels(grid.min, grid.max, options).levels.length;
     if (n < 3 || n > MAX_LEVELS) {
@@ -288,6 +345,10 @@ function regenerate(fresh = false): void {
       save();
       note = `\nInterval set to ${options.value} m for this area.`;
     }
+  }
+  if (style === 'ridges') {
+    regenerateRidges();
+    return;
   }
   const area = host.area();
   result = buildTopo(grid, fitToArea(groundSize(box), area), area, options);
@@ -302,10 +363,9 @@ function regenerate(fresh = false): void {
     setStatus(`No contour lines here: ${range.toLowerCase()}, and ${why}. Try a smaller interval, less filtering, or another area.`, true);
   } else {
     const every = options.mode === 'interval' ? ` every ${options.value} m` : '';
-    const points = result.lines.reduce((n, l) => n + l.length, 0);
     setStatus(
-      `${range}.\n${result.levels.length} levels${every}${result.capped ? ` (thinned to ${MAX_LEVELS})` : ''} · ` +
-        `${result.lines.length} lines · ${points.toLocaleString()} points` +
+      `${range}.\n${result.levels.length} levels${every}${result.capped ? ` (thinned to ${MAX_LEVELS})` : ''}\n` +
+        estimateText(result.lines) +
         (result.dropped ? `\n${result.dropped} fragments under ${options.minLength} mm dropped.` : '') +
         note,
     );
@@ -314,8 +374,27 @@ function regenerate(fresh = false): void {
   renderPreview();
 }
 
+function regenerateRidges(): void {
+  if (!grid || !box) return;
+  ridges = buildRidges(grid, groundSize(box), host.area(), ridge);
+  const range = `Elevation ${metres(ridges.min)} to ${metres(ridges.max)}`;
+  if (ridges.lines.length === 0) {
+    setStatus(`No ridgelines here: every visible piece is shorter than ${ridge.minLength} mm. Lower that filter to keep them.`, true);
+  } else {
+    const x = ridges.exaggeration;
+    setStatus(
+      `${range}.\n${ridges.rows} profiles` +
+        (x > 0 ? ` · heights about ×${x >= 10 ? x.toFixed(0) : x.toFixed(1)} true scale` : ' · flat ground, so the profiles are straight') +
+        `\n${estimateText(ridges.lines)}` +
+        (ridges.dropped ? `\n${ridges.dropped} pieces under ${ridge.minLength} mm dropped.` : ''),
+    );
+  }
+  updateInsert();
+  renderPreview();
+}
+
 function updateInsert(): void {
-  $<HTMLButtonElement>('topo-insert').disabled = !result || result.lines.length === 0;
+  $<HTMLButtonElement>('topo-insert').disabled = !current()?.length;
 }
 
 function renderPreview(): void {
@@ -327,7 +406,7 @@ function renderPreview(): void {
     margin: p.margin,
     origin: p.origin,
     strokes: host.strokes(),
-    previewStrokes: result?.lines,
+    previewStrokes: current(),
   });
 }
 
@@ -339,24 +418,34 @@ function wire(): void {
   fillForm();
   form.addEventListener('submit', (e) => e.preventDefault());
   form.addEventListener('input', () => {
-    const modeChanged = readForm().mode !== options.mode;
-    options = readForm();
-    if (modeChanged) {
-      // The old number means something else in the other mode.
-      options = { ...options, value: options.mode === 'count' ? 20 : grid ? niceInterval(grid.min, grid.max, 20) : DEFAULT_TOPO_OPTIONS.value };
+    const styleChanged = readStyle() !== style;
+    if (styleChanged) {
+      style = readStyle();
+      // The shared fields now show the other style's values.
       fillForm();
+    } else if (style === 'ridges') {
+      ridge = readRidgeForm();
+    } else {
+      const modeChanged = readForm().mode !== options.mode;
+      options = readForm();
+      if (modeChanged) {
+        // The old number means something else in the other mode.
+        options = { ...options, value: options.mode === 'count' ? 20 : grid ? niceInterval(grid.min, grid.max, 20) : DEFAULT_TOPO_OPTIONS.value };
+        fillForm();
+      }
     }
     save();
     clearTimeout(regenTimer);
-    regenTimer = setTimeout(() => regenerate(), 200);
+    regenTimer = setTimeout(() => regenerate(), styleChanged ? 0 : 200);
   });
   // Show the clamped values once editing a field is done.
   form.addEventListener('change', fillForm);
   $('topo-select').addEventListener('click', () => setSelecting(!selecting));
   $('topo-retry').addEventListener('click', () => void fetchElevation());
   $('topo-insert').addEventListener('click', () => {
-    if (!result || result.lines.length === 0) return;
-    host.insert(result.lines);
+    const lines = current();
+    if (!lines?.length) return;
+    host.insert(lines);
     dialog.close();
   });
   $('topo-cancel').addEventListener('click', () => dialog.close());
