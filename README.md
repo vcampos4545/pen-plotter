@@ -37,6 +37,8 @@ npm run build      # typecheck and production build into dist/
   opens it too.
 - **Streets** draws roads, rivers and coastlines from OpenStreetMap for a box on the
   map. See [Street maps](#street-maps) below.
+- **Generate** makes math art: spirographs, harmonographs, strange attractors, flow
+  fields and mazes. See [Generate](#generate) below.
 - **Send to Plotter** runs flatten → simplify → optimize → G-code → stream. It is
   disabled unless the indicator says Connected and the drawing is inside the margin.
   **Download G-code** saves the same program to a file.
@@ -233,6 +235,56 @@ reply, area limits and error messages) and `src/streets.ts` (projection, clippin
 joining, double lines and the pipeline). `src/map-select.ts` holds the box dragging
 shared with Topo. `src/streets-ui.ts` and `src/osm-fetch.ts` are the dialog and the
 request, and load only when **Streets** is first opened.
+
+### Generate
+
+1. Press **Generate** and pick a **Style**. The preview shows the lines in blue on the
+   sheet, with the same line count, distance, draw-time estimate and warnings as Photo.
+2. Tune it. **Size** is the share of the drawable area to use; every style is fitted
+   inside the margin, centred, and curves keep their proportions. **Randomize** gives
+   flow fields and mazes a new seed and the other styles new parameters. The same seed
+   and settings always give the same drawing.
+   - **Spirograph**: a wheel rolling inside (or, with *Roll outside the ring*, around)
+     a fixed ring. *Ring teeth* and *Wheel teeth* are whole numbers, so the curve
+     closes by itself after wheel ÷ gcd(ring, wheel) trips around the ring; the dialog
+     says how many. *Pen offset* is the pen hole's distance from the wheel's centre
+     (1 is the rim; above 1 draws loops).
+   - **Harmonograph**: two pendulums swing the pen in X and Y while a third swings the
+     paper in a circle, all dying away together. *Frequencies* near simple ratios (2:3,
+     1:1) with a small detune (3.005) give the classic drifting figures. *Damping* is
+     the share of the swing lost per second; drawing stops at *Duration* or once the
+     swing is down to 3 %, whichever comes first.
+   - **Lorenz**: the Lorenz system (σ, ρ, β) integrated with RK4 in steps of 0.005 and
+     projected flat. *View angle* turns it about its vertical axis and *Tilt* looks
+     down on it. One continuous line.
+   - **Clifford** and **De Jong**: 2D attractor maps with five presets each plus
+     manual *a*, *b*, *c*, *d*. Their orbits jump across the whole shape on every
+     step, so joining the dots draws random chords and dotting them needs a pen lift
+     per point. Instead a tiny segment on the attractor is pushed through the map again
+     and again, refilling any gap wider than 1/1000 of the shape after each pass. That
+     is drawn as **one continuous line** that traces the attractor's filaments.
+     *Density* is its length in multiples of the attractor's size. Parameters that
+     settle to a point or a short cycle say so.
+   - **Flow field**: evenly spaced streamlines (Jobard and Lefer) through a seeded
+     Perlin noise field. *Swirl size* is the noise scale, *Curl* how far lines turn.
+     Lines are traced both ways from a seed and stop at the edge, at *Longest line*,
+     or within half the *Line spacing* of another line or of themselves, so they never
+     pile up. New lines start one spacing beside finished ones, then from a shuffled
+     grid to fill holes. *Step* is the integration step.
+   - **Maze**: a perfect maze (recursive backtracker; exactly one route between any two
+     cells) of as many *Corridor width* cells as fit. Walls are merged into straight
+     runs and the runs chained end to end, so a 47 × 47 maze plots as about 400 lines.
+     The entrance is at the top left and the exit at the bottom right. *Draw the
+     solution* adds the route as its own stroke.
+3. Press **Add to drawing**. The lines become ordinary strokes, added as one undo step.
+
+Lines are generated in a Web Worker, so the dialog stays responsive. The settings are
+remembered. The tested parts are `src/noise.ts` (seeded Perlin noise),
+`src/curves.ts` (spirograph and harmonograph), `src/attractor.ts` (Lorenz, the 2D maps,
+presets and random chaotic parameters), `src/flowfield.ts` (streamlines and
+separation), `src/maze.ts` (generation, solving, wall merging) and `src/generate.ts`
+(options, fitting, the pipeline and Randomize). `src/generate-ui.ts` is the dialog
+wiring and loads only when **Generate** is first opened.
 
 ### Connection indicator
 

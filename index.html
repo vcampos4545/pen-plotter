@@ -42,6 +42,7 @@
           <button type="button" id="topo-btn" title="Contour lines or ridgelines from a box on the world map">⛰<span>Topo</span></button>
           <button type="button" id="photo-btn" title="Turn a photo into lines">◐<span>Photo</span></button>
           <button type="button" id="streets-btn" title="Roads, rivers and coastlines from OpenStreetMap">▦<span>Streets</span></button>
+          <button type="button" id="gen-btn" title="Spirographs, harmonographs, strange attractors, flow fields and mazes">∿<span>Generate</span></button>
         </div>
       </nav>
 
@@ -334,6 +335,152 @@
             available under the Open Database License. Downloaded through the public
             <a href="https://wiki.openstreetmap.org/wiki/Overpass_API" target="_blank" rel="noopener">Overpass API</a>.
           </p>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="gen-dialog" class="topo-dialog" aria-labelledby="gen-title">
+      <header class="topo-head">
+        <h2 id="gen-title">Generate</h2>
+        <p class="hint">Math art made on this computer: pick a style, tune it, then add it to the drawing.</p>
+        <button type="button" id="gen-close" aria-label="Close">✕</button>
+      </header>
+      <div class="topo-body">
+        <div class="gen-stage">
+          <canvas id="gen-preview" aria-label="Preview of the lines on the sheet"></canvas>
+        </div>
+        <div class="topo-side">
+          <form id="gen-form" class="settings">
+            <label for="gen-style">Style</label>
+            <select id="gen-style" name="style">
+              <optgroup label="Curves">
+                <option value="spirograph">Spirograph</option>
+                <option value="harmonograph">Harmonograph</option>
+              </optgroup>
+              <optgroup label="Strange attractors">
+                <option value="lorenz">Lorenz</option>
+                <option value="clifford">Clifford</option>
+                <option value="dejong">De Jong</option>
+              </optgroup>
+              <optgroup label="Fields">
+                <option value="flow">Flow field</option>
+                <option value="maze">Maze</option>
+              </optgroup>
+            </select>
+            <label for="gen-size" title="Share of the drawable area to use; the drawing is centred">Size <output id="gen-size-out"></output></label>
+            <input type="range" id="gen-size" name="size" min="10" max="100" step="1" />
+
+            <fieldset class="gen-style" data-style="spirograph">
+              <h3>Spirograph</h3>
+              <label for="gen-sp-ring" title="Teeth on the fixed ring">Ring teeth</label>
+              <input type="number" id="gen-sp-ring" name="spirograph.ring" min="3" max="400" step="1" />
+              <label for="gen-sp-wheel" title="Teeth on the rolling wheel. Inside the ring it must be smaller than the ring">Wheel teeth</label>
+              <input type="number" id="gen-sp-wheel" name="spirograph.wheel" min="1" max="400" step="1" />
+              <label for="gen-sp-pen" title="Distance of the pen hole from the wheel's centre. 1 is the wheel's rim">Pen offset (× wheel radius)</label>
+              <input type="number" id="gen-sp-pen" name="spirograph.pen" min="0" max="3" step="0.05" />
+              <label for="gen-sp-outside">Roll outside the ring</label>
+              <input type="checkbox" id="gen-sp-outside" name="spirograph.outside" />
+            </fieldset>
+            <fieldset class="gen-style" data-style="harmonograph" hidden>
+              <h3>Harmonograph</h3>
+              <label for="gen-h-fx">X frequency (swings/s)</label>
+              <input type="number" id="gen-h-fx" name="harmonograph.freqX" min="0" max="20" step="0.001" />
+              <label for="gen-h-fy">Y frequency (swings/s)</label>
+              <input type="number" id="gen-h-fy" name="harmonograph.freqY" min="0" max="20" step="0.001" />
+              <label for="gen-h-px">X phase (°)</label>
+              <input type="number" id="gen-h-px" name="harmonograph.phaseX" min="-360" max="360" step="5" />
+              <label for="gen-h-py">Y phase (°)</label>
+              <input type="number" id="gen-h-py" name="harmonograph.phaseY" min="-360" max="360" step="5" />
+              <label for="gen-h-fr" title="The paper swings in a circle at this rate">Rotary frequency (swings/s)</label>
+              <input type="number" id="gen-h-fr" name="harmonograph.freqR" min="0" max="20" step="0.001" />
+              <label for="gen-h-rot" title="Size of the paper's circle relative to the pen's swing. 0 turns it off">Rotary amount (0–1)</label>
+              <input type="number" id="gen-h-rot" name="harmonograph.rotary" min="0" max="1" step="0.05" />
+              <label for="gen-h-damp" title="Share of the swing lost every second">Damping (per s)</label>
+              <input type="number" id="gen-h-damp" name="harmonograph.damping" min="0" max="0.5" step="0.005" />
+              <label for="gen-h-dur" title="Drawing also stops once the swing is down to 3%">Duration (s)</label>
+              <input type="number" id="gen-h-dur" name="harmonograph.duration" min="1" max="1000" step="5" />
+            </fieldset>
+            <fieldset class="gen-style" data-style="lorenz" hidden>
+              <h3>Lorenz attractor</h3>
+              <label for="gen-l-yaw" title="Turn the butterfly about its vertical axis">View angle (°)</label>
+              <input type="number" id="gen-l-yaw" name="lorenz.yaw" min="-360" max="360" step="5" />
+              <label for="gen-l-pitch" title="Look down on it from above (positive) or up from below">Tilt (°)</label>
+              <input type="number" id="gen-l-pitch" name="lorenz.pitch" min="-90" max="90" step="5" />
+              <label for="gen-l-steps" title="Length of the line: time steps of 0.005">Steps</label>
+              <input type="number" id="gen-l-steps" name="lorenz.steps" min="100" max="200000" step="1000" />
+              <label for="gen-l-sigma">σ (sigma)</label>
+              <input type="number" id="gen-l-sigma" name="lorenz.sigma" min="0.1" max="50" step="0.1" />
+              <label for="gen-l-rho">ρ (rho)</label>
+              <input type="number" id="gen-l-rho" name="lorenz.rho" min="0.1" max="100" step="0.5" />
+              <label for="gen-l-beta">β (beta)</label>
+              <input type="number" id="gen-l-beta" name="lorenz.beta" min="0.1" max="20" step="0.05" />
+            </fieldset>
+            <fieldset class="gen-style" data-style="clifford" hidden>
+              <h3>Clifford attractor</h3>
+              <label for="gen-clifford-preset">Preset</label>
+              <select id="gen-clifford-preset"></select>
+              <label for="gen-c-a">a</label>
+              <input type="number" id="gen-c-a" name="clifford.a" min="-5" max="5" step="0.01" />
+              <label for="gen-c-b">b</label>
+              <input type="number" id="gen-c-b" name="clifford.b" min="-5" max="5" step="0.01" />
+              <label for="gen-c-c">c</label>
+              <input type="number" id="gen-c-c" name="clifford.c" min="-5" max="5" step="0.01" />
+              <label for="gen-c-d">d</label>
+              <input type="number" id="gen-c-d" name="clifford.d" min="-5" max="5" step="0.01" />
+              <label for="gen-c-density" title="Length of the line in multiples of the attractor's size">Density</label>
+              <input type="number" id="gen-c-density" name="clifford.density" min="1" max="200" step="1" />
+            </fieldset>
+            <fieldset class="gen-style" data-style="dejong" hidden>
+              <h3>De Jong attractor</h3>
+              <label for="gen-dejong-preset">Preset</label>
+              <select id="gen-dejong-preset"></select>
+              <label for="gen-j-a">a</label>
+              <input type="number" id="gen-j-a" name="dejong.a" min="-5" max="5" step="0.01" />
+              <label for="gen-j-b">b</label>
+              <input type="number" id="gen-j-b" name="dejong.b" min="-5" max="5" step="0.01" />
+              <label for="gen-j-c">c</label>
+              <input type="number" id="gen-j-c" name="dejong.c" min="-5" max="5" step="0.01" />
+              <label for="gen-j-d">d</label>
+              <input type="number" id="gen-j-d" name="dejong.d" min="-5" max="5" step="0.01" />
+              <label for="gen-j-density" title="Length of the line in multiples of the attractor's size">Density</label>
+              <input type="number" id="gen-j-density" name="dejong.density" min="1" max="200" step="1" />
+            </fieldset>
+            <fieldset class="gen-style" data-style="flow" hidden>
+              <h3>Flow field</h3>
+              <label for="gen-f-seed">Seed</label>
+              <input type="number" id="gen-f-seed" name="flow.seed" min="0" max="999999" step="1" />
+              <label for="gen-f-scale" title="Distance over which the direction changes a lot">Swirl size (mm)</label>
+              <input type="number" id="gen-f-scale" name="flow.scale" min="5" max="2000" step="5" />
+              <label for="gen-f-curl" title="How far the lines turn. 0 is straight, higher makes eddies">Curl</label>
+              <input type="number" id="gen-f-curl" name="flow.curl" min="0" max="10" step="0.1" />
+              <label for="gen-f-spacing" title="Gap between neighbouring lines. Lines stop at half this distance from each other">Line spacing (mm)</label>
+              <input type="number" id="gen-f-spacing" name="flow.spacing" min="0.5" max="50" step="0.5" />
+              <label for="gen-f-step" title="Smaller follows the field more closely and is slower">Step (mm)</label>
+              <input type="number" id="gen-f-step" name="flow.step" min="0.1" max="5" step="0.1" />
+              <label for="gen-f-max">Longest line (mm)</label>
+              <input type="number" id="gen-f-max" name="flow.maxLength" min="1" max="10000" step="10" />
+              <label for="gen-f-min">Drop lines shorter than (mm)</label>
+              <input type="number" id="gen-f-min" name="flow.minLength" min="0" max="1000" step="1" />
+            </fieldset>
+            <fieldset class="gen-style" data-style="maze" hidden>
+              <h3>Maze</h3>
+              <label for="gen-m-seed">Seed</label>
+              <input type="number" id="gen-m-seed" name="maze.seed" min="0" max="999999" step="1" />
+              <label for="gen-m-cell">Corridor width (mm)</label>
+              <input type="number" id="gen-m-cell" name="maze.cell" min="1" max="100" step="0.5" />
+              <label for="gen-m-solution" title="The path from entrance to exit, as a separate line">Draw the solution</label>
+              <input type="checkbox" id="gen-m-solution" name="maze.solution" />
+            </fieldset>
+          </form>
+          <div class="row">
+            <button type="button" id="gen-randomize" title="A new seed, or new parameters for this style">🎲 Randomize</button>
+          </div>
+          <div id="gen-status" class="job-text" role="status" aria-live="polite"></div>
+          <div id="gen-warning" class="warn" hidden></div>
+          <div class="row topo-actions">
+            <button type="button" id="gen-insert" class="send" disabled>Add to drawing</button>
+            <button type="button" id="gen-cancel">Cancel</button>
+          </div>
         </div>
       </div>
     </dialog>

@@ -582,6 +582,15 @@ $('streets-btn').addEventListener('click', async () => {
   }
 });
 
+$('gen-btn').addEventListener('click', async () => {
+  try {
+    const { openGenerate } = await import('./generate-ui');
+    openGenerate(sheetHost);
+  } catch (err) {
+    alert(`Could not open the Generate tool: ${(err as Error).message}`);
+  }
+});
+
 // ---- keyboard -----------------------------------------------------------
 
 const TOOL_KEYS: Record<string, Tool> = { p: 'freehand', l: 'line', r: 'rect', o: 'ellipse', e: 'eraser' };

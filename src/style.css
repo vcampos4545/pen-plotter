@@ -524,7 +524,8 @@ progress {
   line-height: 1.35;
 }
 
-.photo-drop {
+.photo-drop,
+.gen-stage {
   position: relative;
   min-width: 0;
   background: var(--bg);
@@ -535,7 +536,8 @@ progress {
   outline-offset: -8px;
 }
 
-.photo-drop canvas {
+.photo-drop canvas,
+.gen-stage canvas {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -570,29 +572,35 @@ progress {
   image-rendering: pixelated;
 }
 
-#photo-form {
+#photo-form,
+#gen-form {
   grid-template-columns: 1fr 140px;
 }
 
-#photo-form output {
+#photo-form output,
+#gen-form output {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
 
 fieldset.photo-style,
-fieldset.topo-style {
+fieldset.topo-style,
+fieldset.gen-style {
   display: contents;
 }
 
 fieldset.photo-style[hidden],
-fieldset.topo-style[hidden] {
+fieldset.topo-style[hidden],
+fieldset.gen-style[hidden] {
   display: none;
 }
 
-#photo-status {
+#photo-status,
+#gen-status {
   white-space: pre-line;
 }
 
-#photo-status.failed {
+#photo-status.failed,
+#gen-status.failed {
   color: var(--danger);
 }
