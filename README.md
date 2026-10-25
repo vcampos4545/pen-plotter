@@ -35,6 +35,8 @@ npm run build      # typecheck and production build into dist/
 - **Photo** turns a photo into lines: squiggles, a spiral, hatching, outlines or TSP
   art. See [Photo to lines](#photo-to-lines) below. Dropping a photo on the sheet
   opens it too.
+- **Streets** draws roads, rivers and coastlines from OpenStreetMap for a box on the
+  map. See [Street maps](#street-maps) below.
 - **Send to Plotter** runs flatten → simplify → optimize → G-code → stream. It is
   disabled unless the indicator says Connected and the drawing is inside the margin.
   **Download G-code** saves the same program to a file.
@@ -185,6 +187,52 @@ hatching), `src/edges.ts` (edge detection and tracing), `src/stipple.ts` (stippl
 tour and line ordering) and `src/photo.ts` (framing, options, the pipeline and the
 estimate). `src/photo-ui.ts` is the dialog wiring and loads only when **Photo** is
 first opened.
+
+### Street maps
+
+1. Press **Streets**. Pan and zoom the map to a place.
+2. Press **Select area** (or hold Shift) and drag a box. **Match paper shape** works as
+   in Topo. The roads, water and other features in the box download in one request and
+   appear in the preview in blue.
+3. Pick the **Layers**: major roads (motorway to tertiary), minor roads (residential,
+   service, unclassified), paths (footways, cycleways, steps, tracks), railways (rail,
+   light rail, tram; not yards or sidings), rivers and streams (centre lines), coast and
+   water (coastlines and the outlines of lakes and rivers), buildings and parks.
+   Buildings, parks and paths are off by default. Turning a layer off updates the
+   preview at once; turning on one that was not downloaded shows **Download**, which
+   fetches the box again with it.
+4. Tune the lines. **Double-line major roads** draws each major road as two parallel
+   lines **Double-line gap** mm apart so they read as wider. **Simplify** is the point
+   reduction tolerance in mm, and **Drop lines shorter than** removes fragments left at
+   the box edge.
+5. Check the line count, pen-down length, pen-up estimate and draw time (with the same
+   warnings as Photo), then press **Add to drawing**. The lines become ordinary
+   strokes, added as one undo step.
+
+The map is fitted inside the margin at its true ground proportions, the same way as
+Topo. Every line is clipped to the selected box, not just the paper. OpenStreetMap
+splits a street into many ways; ways that share an end node are joined into longer
+lines (continuing along the straightest branch at junctions) so the pen lifts less.
+
+The data comes from the public [Overpass API](https://wiki.openstreetmap.org/wiki/Overpass_API)
+at `overpass-api.de`, which needs no key. To stay within its
+[usage policy](https://wiki.openstreetmap.org/wiki/Overpass_API#Public_Overpass_API_instances), the
+dialog sends exactly one request per box (or per **Download** / **Retry download**
+press), never on layer or line changes, with a 90 s server time limit. Boxes are
+capped by the densest layer you turn on: 3 km across with buildings, 5 km with paths,
+8 km with minor roads, 15 km with parks and 25 km otherwise. A larger box is refused
+with a message naming the layer to turn off. A busy server (HTTP 504), rate limiting
+(HTTP 429), a timeout or a network failure says so and offers **Retry download**.
+
+**Attribution.** Map data © [OpenStreetMap](https://www.openstreetmap.org/copyright)
+contributors, available under the Open Database License. The credit is shown on the
+map and under the dialog's buttons; keep it with plots you publish.
+
+The tested parts are `src/osm.ts` (the Overpass query, tag classification, parsing the
+reply, area limits and error messages) and `src/streets.ts` (projection, clipping,
+joining, double lines and the pipeline). `src/map-select.ts` holds the box dragging
+shared with Topo. `src/streets-ui.ts` and `src/osm-fetch.ts` are the dialog and the
+request, and load only when **Streets** is first opened.
 
 ### Connection indicator
 

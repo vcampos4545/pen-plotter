@@ -505,6 +505,25 @@ progress {
   line-height: 1.35;
 }
 
+#streets-select[aria-pressed='true'] {
+  background: #e0eaff;
+  border-color: var(--accent);
+}
+
+#streets-status {
+  white-space: pre-line;
+}
+
+#streets-status.failed {
+  color: var(--danger);
+}
+
+.streets-credit {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .photo-drop {
   position: relative;
   min-width: 0;

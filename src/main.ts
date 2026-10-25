@@ -573,6 +573,15 @@ stage.addEventListener('drop', (e) => {
   else alert('Drop a JPEG, PNG or WebP photo here to trace it. Use Import for SVG and JSON drawings.');
 });
 
+$('streets-btn').addEventListener('click', async () => {
+  try {
+    const { openStreets } = await import('./streets-ui');
+    openStreets(sheetHost);
+  } catch (err) {
+    alert(`Could not open the Streets map: ${(err as Error).message}`);
+  }
+});
+
 // ---- keyboard -----------------------------------------------------------
 
 const TOOL_KEYS: Record<string, Tool> = { p: 'freehand', l: 'line', r: 'rect', o: 'ellipse', e: 'eraser' };

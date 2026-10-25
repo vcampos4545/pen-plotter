@@ -41,6 +41,7 @@
         <div class="group">
           <button type="button" id="topo-btn" title="Contour lines or ridgelines from a box on the world map">⛰<span>Topo</span></button>
           <button type="button" id="photo-btn" title="Turn a photo into lines">◐<span>Photo</span></button>
+          <button type="button" id="streets-btn" title="Roads, rivers and coastlines from OpenStreetMap">▦<span>Streets</span></button>
         </div>
       </nav>
 
@@ -269,6 +270,70 @@
             <button type="button" id="photo-insert" class="send" disabled>Add to drawing</button>
             <button type="button" id="photo-cancel">Cancel</button>
           </div>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="streets-dialog" class="topo-dialog" aria-labelledby="streets-title">
+      <header class="topo-head">
+        <h2 id="streets-title">Street map</h2>
+        <p class="hint">Find a place, press <b>Select area</b> (or hold Shift) and drag a box on the map.</p>
+        <button type="button" id="streets-close" aria-label="Close">✕</button>
+      </header>
+      <div class="topo-body">
+        <div class="topo-mapwrap">
+          <div id="streets-map" class="topo-map"></div>
+          <div id="streets-map-warning" class="warn topo-map-warning" hidden></div>
+        </div>
+        <div class="topo-side">
+          <div class="row">
+            <button type="button" id="streets-select" aria-pressed="false">▭ Select area</button>
+            <label class="check" title="Lock the box to the drawable area's shape so the map fills the sheet"
+              ><input type="checkbox" id="streets-lock" checked /> Match paper shape</label
+            >
+          </div>
+          <p id="streets-box" class="hint">No area selected.</p>
+          <form id="streets-form" class="settings">
+            <h3>Layers</h3>
+            <label for="streets-major">Major roads</label>
+            <input type="checkbox" id="streets-major" name="layers.major" />
+            <label for="streets-minor" title="Residential, service and unclassified streets">Minor roads</label>
+            <input type="checkbox" id="streets-minor" name="layers.minor" />
+            <label for="streets-paths" title="Footways, cycleways, steps and tracks">Paths</label>
+            <input type="checkbox" id="streets-paths" name="layers.paths" />
+            <label for="streets-rail" title="Rail, light rail and tram lines; not subways">Railways</label>
+            <input type="checkbox" id="streets-rail" name="layers.rail" />
+            <label for="streets-waterways" title="Centre lines of rivers, streams and canals">Rivers and streams</label>
+            <input type="checkbox" id="streets-waterways" name="layers.waterways" />
+            <label for="streets-water" title="Coastlines, lake and river outlines">Coast and water</label>
+            <input type="checkbox" id="streets-water" name="layers.water" />
+            <label for="streets-buildings" title="Every building outline. Heavy: limited to boxes up to 3 km across">Buildings</label>
+            <input type="checkbox" id="streets-buildings" name="layers.buildings" />
+            <label for="streets-parks" title="Park outlines">Parks</label>
+            <input type="checkbox" id="streets-parks" name="layers.parks" />
+            <h3>Lines</h3>
+            <label for="streets-double" title="Draw major roads as two parallel lines so they read as wider">Double-line major roads</label>
+            <input type="checkbox" id="streets-double" name="doubleMajor" />
+            <label for="streets-gap">Double-line gap (mm)</label>
+            <input type="number" id="streets-gap" name="doubleGap" min="0.2" max="5" step="0.1" />
+            <label for="streets-simplify">Simplify (mm)</label>
+            <input type="number" id="streets-simplify" name="simplify" min="0" max="5" step="0.05" />
+            <label for="streets-minlength">Drop lines shorter than (mm)</label>
+            <input type="number" id="streets-minlength" name="minLength" min="0" max="100" step="0.5" />
+          </form>
+          <div id="streets-status" class="job-text" role="status" aria-live="polite"></div>
+          <div id="streets-warning" class="warn" hidden></div>
+          <div class="topo-preview-wrap"><canvas id="streets-preview" aria-label="Preview of the street map on the sheet"></canvas></div>
+          <div class="row topo-actions">
+            <button type="button" id="streets-fetch" hidden>Download</button>
+            <button type="button" id="streets-insert" class="send" disabled>Add to drawing</button>
+            <button type="button" id="streets-cancel">Cancel</button>
+          </div>
+          <p class="hint streets-credit">
+            Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors,
+            available under the Open Database License. Downloaded through the public
+            <a href="https://wiki.openstreetmap.org/wiki/Overpass_API" target="_blank" rel="noopener">Overpass API</a>.
+          </p>
         </div>
       </div>
     </dialog>

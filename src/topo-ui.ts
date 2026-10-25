@@ -6,20 +6,18 @@ import { estimatePhoto } from './photo';
 import { buildRidges, sanitizeRidgeOptions, type RidgeOptions, type RidgeResult } from './ridgeline';
 import type { Settings } from './settings';
 import {
-  boxFromCorners,
   chooseZoom,
   gridDims,
   groundSize,
   loadMosaic,
-  lockAspect,
   resampleGrid,
   tileCount,
   tileRange,
   type ElevationGrid,
   type GeoBox,
-  type LatLon,
 } from './terrain';
 import { terrariumLoader } from './terrain-fetch';
+import { enableBoxSelect } from './map-select';
 import { buildTopo, DEFAULT_TOPO_OPTIONS, fitToArea, MAX_LEVELS, topoLevels, type TopoOptions, type TopoResult } from './topo';
 import { CanvasView } from './view';
 
@@ -101,7 +99,6 @@ let options = saved.options;
 let ridge = saved.ridge;
 let host: TopoHost;
 let map: L.Map | undefined;
-let rect: L.Rectangle | undefined;
 let selecting = false;
 let box: GeoBox | undefined;
 /** Elevation for `box`, once downloaded. */
@@ -165,72 +162,18 @@ function createMap(): L.Map {
   tiles.on('load', () => (warning.hidden = true));
   m.on('moveend', save);
 
-  const el = m.getContainer();
-  let drag: { id: number; anchor: LatLon } | undefined;
-  const at = (e: PointerEvent): LatLon => {
-    const ll = m.mouseEventToLatLng(e);
-    return { lat: ll.lat, lon: ll.lng };
-  };
-  const cornerFor = (e: PointerEvent): LatLon => {
-    const a = host.area();
-    const ratio = (a.maxX - a.minX) / (a.maxY - a.minY);
-    return $<HTMLInputElement>('topo-lock').checked ? lockAspect(drag!.anchor, at(e), ratio) : at(e);
-  };
-  const showBox = (b: GeoBox) => {
-    const bounds = L.latLngBounds([b.south, b.west], [b.north, b.east]);
-    if (rect) rect.setBounds(bounds);
-    else rect = L.rectangle(bounds, { color: '#2563eb', weight: 2, fillOpacity: 0.08, interactive: false }).addTo(m);
-  };
-  // Capture phase, ahead of Leaflet's own handlers, so a box drag never pans the map.
-  el.addEventListener(
-    'pointerdown',
-    (e) => {
-      if (e.button !== 0 || !(selecting || e.shiftKey) || (e.target as Element).closest('.leaflet-control')) return;
-      e.preventDefault();
-      e.stopPropagation();
-      m.dragging.disable();
-      try {
-        el.setPointerCapture(e.pointerId);
-      } catch {
-        // Synthetic pointer; the drag still works while over the map.
-      }
-      drag = { id: e.pointerId, anchor: at(e) };
+  enableBoxSelect(m, {
+    selecting: () => selecting,
+    ratio: () => {
+      if (!$<HTMLInputElement>('topo-lock').checked) return undefined;
+      const a = host.area();
+      return (a.maxX - a.minX) / (a.maxY - a.minY);
     },
-    true,
-  );
-  el.addEventListener(
-    'pointermove',
-    (e) => {
-      if (!drag || e.pointerId !== drag.id) return;
-      e.stopPropagation();
-      showBox(boxFromCorners(drag.anchor, cornerFor(e)));
+    onSelect: (b) => {
+      setSelecting(false);
+      selectBox(b);
     },
-    true,
-  );
-  const end = (e: PointerEvent, cancelled: boolean) => {
-    if (!drag || e.pointerId !== drag.id) return;
-    e.stopPropagation();
-    const b = boxFromCorners(drag.anchor, cornerFor(e));
-    drag = undefined;
-    m.dragging.enable();
-    const sw = m.latLngToContainerPoint([b.south, b.west]);
-    const ne = m.latLngToContainerPoint([b.north, b.east]);
-    // A click rather than a drag: keep whatever was selected before.
-    if (cancelled || Math.abs(ne.x - sw.x) < 6 || Math.abs(ne.y - sw.y) < 6) {
-      if (box) {
-        showBox(box);
-      } else {
-        rect?.remove();
-        rect = undefined;
-      }
-      return;
-    }
-    setSelecting(false);
-    showBox(b);
-    selectBox(b);
-  };
-  el.addEventListener('pointerup', (e) => end(e, false), true);
-  el.addEventListener('pointercancel', (e) => end(e, true), true);
+  });
   return m;
 }
 
