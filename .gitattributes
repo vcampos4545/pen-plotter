@@ -1,0 +1,42 @@
+# Text files: normalize to LF.
+* text=auto eol=lf
+
+# KiCad files are text and diff well.
+*.kicad_sch text eol=lf
+*.kicad_pcb text eol=lf
+*.kicad_pro text eol=lf
+*.kicad_sym text eol=lf
+*.kicad_mod text eol=lf
+
+# CAD and print files: binary, kept out of GitHub language stats.
+*.stl  binary linguist-generated
+*.STL  binary linguist-generated
+*.step binary linguist-generated
+*.stp  binary linguist-generated
+*.STEP binary linguist-generated
+*.STP  binary linguist-generated
+*.3mf  binary linguist-generated
+*.f3d  binary linguist-generated
+
+# Gerber and drill output.
+*.gbr binary linguist-generated
+*.gtl binary linguist-generated
+*.gbl binary linguist-generated
+*.gto binary linguist-generated
+*.gbo binary linguist-generated
+*.gts binary linguist-generated
+*.gbs binary linguist-generated
+*.gtp binary linguist-generated
+*.gbp binary linguist-generated
+*.gko binary linguist-generated
+*.gm1 binary linguist-generated
+*.g1  binary linguist-generated
+*.g2  binary linguist-generated
+*.drl binary linguist-generated
+*.xln binary linguist-generated
+*.zip binary
+
+# Images.
+*.png  binary
+*.jpg  binary
+*.jpeg binary

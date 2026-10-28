@@ -9,6 +9,13 @@ on the ESP32.
 The controller's FluidNC `config.yaml`, wiring and first power-on steps are in
 [firmware/README.md](firmware/README.md).
 
+## Repository layout
+
+- `src/`, `test/`, `sim/`, `index.html`: the web app, its tests and the FluidNC simulator.
+- [`firmware/`](firmware/): FluidNC `config.yaml`, wiring and first power-on.
+- [`hardware/`](hardware/): CAD source, printable STLs, KiCad project and fab orders.
+- [`docs/`](docs/): bill of materials, wiring photos, assembly notes.
+
 ## Run it
 
 Needs Node 20 or newer.
