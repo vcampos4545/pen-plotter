@@ -2,3 +2,20 @@ node_modules/
 dist/
 .claude/settings.local.json
 *.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# KiCad
+*-backups/
+*.kicad_prl
+fp-info-cache
+_autosave-*
+\#auto_saved_files\#
+*.lck
+~*.lck
+
+# Slicer output (the app's own G-code lives elsewhere)
+hardware/**/*.gcode
+hardware/**/*.bgcode
