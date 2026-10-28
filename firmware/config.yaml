@@ -69,12 +69,15 @@ axes:
     acceleration_mm_per_sec2: 300
     # Usable length of the axis. Change this (and Y's) if your frame differs.
     max_travel_mm: 400
-    # Rejects any move outside 0..max_travel_mm before it starts.
+    # Rejects any move outside 0..max_travel_mm (machine position) before it starts.
     soft_limits: true
-    # No switch yet. This section only sets the soft-limit range: with
-    # positive_direction false and mpos_mm 0 the axis runs from 0 to max_travel_mm
-    # (without it FluidNC would use -max_travel_mm..0). cycle 0 keeps the axis out
-    # of $H, and allow_single_axis false refuses $HX.
+    # No switch yet. With positive_direction false and mpos_mm 0 the soft-limit
+    # range is 0 to max_travel_mm (without this section FluidNC would use
+    # -max_travel_mm..0). cycle -1 means "set position only": $H makes the X
+    # machine position mpos_mm (0) wherever the carriage is, without moving.
+    # That is how the app's Set origin moves the soft limits with the origin.
+    # allow_single_axis false refuses $HX: that path sets the position but skips
+    # FluidNC's parser/planner resync, so the next move would go the wrong way.
     #
     # To enable homing once a switch is fitted at the X0 end:
     #   1. Add  limit_neg_pin: gpio.NN:low  under motor0 (use an input-capable pin,
@@ -83,7 +86,7 @@ axes:
     #      seek_mm_per_min / feed_mm_per_min (e.g. 1500 / 200).
     #   3. Set  must_home: true  under start: if every job should require $H.
     homing:
-      cycle: 0
+      cycle: -1
       allow_single_axis: false
       positive_direction: false
       mpos_mm: 0
@@ -121,7 +124,7 @@ axes:
     # Same as X. For a Y switch at the Y0 end, use  cycle: 2  as well so X and Y
     # home together after Z.
     homing:
-      cycle: 0
+      cycle: -1
       allow_single_axis: false
       positive_direction: false
       mpos_mm: 0
@@ -155,9 +158,11 @@ axes:
     # Keep the servo signal on so the pen stays where it was put.
     idle_disable: false
     # Z has no switch either. "Homing" a servo just jumps it to mpos_mm, so
-    # $H (which only runs cycle 1 here) lifts the pen straight to Z5. Run it
-    # once after power-on: Z boots at 0 (pen down) with the servo unpowered, and
-    # without $H the first move would swing the pen toward the paper first.
+    # $H lifts the pen straight to Z5 (and, through X/Y cycle -1, makes the
+    # current spot machine X0 Y0). Run it once after power-on: Z boots at 0 (pen
+    # down) with the servo unpowered, and without $H the first move would swing
+    # the pen toward the paper first. This Z cycle is also what makes $H resync
+    # FluidNC's position after X/Y are set.
     homing:
       cycle: 1
       allow_single_axis: true

@@ -45,8 +45,14 @@ npm run build      # typecheck and production build into dist/
 - The stats panel shows pen-up travel as drawn vs. after optimization. Tick
   **Show pen-up moves** to overlay the planned travel in red.
 - **Job** shows lines sent and acknowledged and a percentage, with Pause, Resume and Stop.
-- **Machine** has Unlock (`$X`), Pen up/down, To origin, and a console for one-off commands.
-  These are disabled while a job runs.
+- **Machine** has Unlock (`$X`), Pen up/down, To origin, Set origin, and a console for
+  one-off commands. These are disabled while a job runs.
+- **Set origin** makes the pen's current spot X0 Y0, after a confirmation. It clears the
+  work offsets and runs `$H`, which with this repo's `config.yaml` sets the machine
+  position of X and Y to 0 without moving (homing `cycle: -1`) and lifts the pen. The
+  travel limits then count from the new origin too. With an older `config.yaml` it falls
+  back to a work offset (`G10 L20`) and says how much of the travel window is left; see
+  [firmware/README.md](firmware/README.md#set-origin).
 
 ### Topo lines
 
@@ -398,10 +404,13 @@ the firmware, `currentID` text frames on connect, `?` status reports with live p
 `!` / `~` hold and resume, and `0x18` soft reset (`ALARM:3` if it interrupts motion, then
 the banner). It acks each line with `ok` when its simulated move finishes. Malformed or
 unsupported lines get `error:N`, G-code in Alarm gets `error:9`, and it supports `$X`.
+It keeps a work offset (`G10 L2`/`L20`, `G92.1`, `WCO` in every tenth report), and `$H`
+sets X/Y to machine 0 and lifts the pen like the repo's config. `--home-xy false` models
+an older config where `$H` only lifts the pen.
 
 `test/sim.integration.test.ts` runs the real connection and streamer against it: the
 connected handshake, a full job under flow control, pause/resume, stop with pen lift,
-abort on `error:`, and reconnect after the server restarts.
+abort on `error:`, Set origin with both configs, and reconnect after the server restarts.
 
 ## Not done yet
 

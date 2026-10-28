@@ -8,9 +8,14 @@
 //     0x18 soft reset (ALARM:3 if it interrupts motion, then the banner)
 //   - G-code lines run one at a time and are acked with "ok" when they finish;
 //     malformed or unsupported lines get "error:N"; lines in Alarm get error:9
-//   - "$X" unlocks, "$$" / "$I" / "$G" print a little, "$H" is error:5
+//   - work offsets: G10 L2 / L20 (one coordinate system), G92.1; status reports
+//     carry MPos, plus WCO on the first report and every 10th after it
+//   - "$X" unlocks, "$$" / "$I" / "$G" print a little
+//   - "$H" models firmware/config.yaml: X/Y homing cycle -1 sets their MPos to 0
+//     where they stand, then the Z servo "homes" to Z5. With homeXY false it
+//     models an older config (X/Y cycle 0): $H only lifts the pen.
 //
-// Usage: npm run sim -- [--port 8081] [--host 127.0.0.1] [--speedup 20]
+// Usage: npm run sim -- [--port 8081] [--host 127.0.0.1] [--speedup 20] [--home-xy false]
 
 import { WebSocketServer } from 'ws';
 import { pathToFileURL } from 'node:url';
@@ -18,9 +23,11 @@ import { pathToFileURL } from 'node:url';
 const BANNER = "Grbl 3.9 [FluidNC v4.1.1-mock (sim) '$' for help]";
 const RAPID_MM_MIN = 12000;
 const NUM = /^([A-Z])([-+]?(?:\d+\.?\d*|\.\d+))/;
-const SUPPORTED_G = new Set([0, 1, 4, 17, 20, 21, 90, 91, 94]);
+const SUPPORTED_G = new Set([0, 1, 4, 10, 17, 20, 21, 90, 91, 92.1, 94]);
 const SUPPORTED_M = new Set([0, 2, 3, 4, 5, 30]);
-const LETTERS = new Set(['G', 'M', 'X', 'Y', 'Z', 'F', 'P', 'S', 'N']);
+const LETTERS = new Set(['G', 'M', 'X', 'Y', 'Z', 'F', 'P', 'L', 'S', 'N']);
+const PEN_UP_Z = 5;
+const WCO_EVERY = 10;
 
 /** Parse one line. Returns { kind: 'empty' | 'system' | 'gcode', ... } or { error: code }. */
 export function parseLine(raw) {
@@ -50,10 +57,13 @@ export function parseLine(raw) {
 
 const fmt = (n) => n.toFixed(3);
 
-export function startMockFluidNC({ port = 8081, host = '127.0.0.1', speedup = 20, log = () => {} } = {}) {
+export function startMockFluidNC({ port = 8081, host = '127.0.0.1', speedup = 20, homeXY = true, log = () => {} } = {}) {
   const m = {
     state: 'Idle', // Idle | Run | Hold | Alarm
-    pos: { x: 0, y: 0, z: 0 },
+    pos: { x: 0, y: 0, z: 0 }, // machine position (MPos)
+    wco: { x: 0, y: 0, z: 0 }, // G54 work offset; WPos = MPos - wco - g92
+    g92: { x: 0, y: 0, z: 0 },
+    reports: 0,
     feed: 1000,
     motion: 0,
     relative: false,
@@ -97,7 +107,9 @@ export function startMockFluidNC({ port = 8081, host = '127.0.0.1', speedup = 20
     const p = livePos();
     const state = m.state === 'Hold' ? 'Hold:0' : m.state;
     const feed = m.state === 'Run' && m.current ? m.feed : 0;
-    return `<${state}|MPos:${fmt(p.x)},${fmt(p.y)},${fmt(p.z)}|FS:${feed},0>`;
+    const off = (k) => m.wco[k] + m.g92[k];
+    const wco = m.reports++ % WCO_EVERY === 0 ? `|WCO:${fmt(off('x'))},${fmt(off('y'))},${fmt(off('z'))}` : '';
+    return `<${state}|MPos:${fmt(p.x)},${fmt(p.y)},${fmt(p.z)}|FS:${feed},0${wco}>`;
   };
 
   // Work out what a parsed G-code line does: new modal state, target and duration (ms).
@@ -107,11 +119,16 @@ export function startMockFluidNC({ port = 8081, host = '127.0.0.1', speedup = 20
     let inches = m.inches;
     let feed = m.feed;
     let dwell = null;
+    let g10 = false;
+    let g92reset = false;
+    let lword = null;
     const axes = {};
     for (const [l, v] of words) {
       if (l === 'G') {
         if (v === 0 || v === 1) motion = v;
         else if (v === 4) dwell = 0;
+        else if (v === 10) g10 = true;
+        else if (v === 92.1) g92reset = true;
         else if (v === 90) relative = false;
         else if (v === 91) relative = true;
         else if (v === 20) inches = true;
@@ -119,6 +136,7 @@ export function startMockFluidNC({ port = 8081, host = '127.0.0.1', speedup = 20
       } else if (l === 'X' || l === 'Y' || l === 'Z') axes[l.toLowerCase()] = v * (inches ? 25.4 : 1);
       else if (l === 'F') feed = v * (inches ? 25.4 : 1);
       else if (l === 'P' && dwell !== null) dwell = v;
+      else if (l === 'L') lword = v;
     }
     const apply = () => {
       m.motion = motion;
@@ -126,11 +144,26 @@ export function startMockFluidNC({ port = 8081, host = '127.0.0.1', speedup = 20
       m.inches = inches;
       m.feed = feed;
     };
+    if (g10 && (lword === 2 || lword === 20)) {
+      // Only one coordinate system is modelled, so P is ignored.
+      const setOffsets = () => {
+        apply();
+        for (const k of Object.keys(axes)) m.wco[k] = lword === 2 ? axes[k] : m.pos[k] - m.g92[k] - axes[k];
+      };
+      return { apply: setOffsets, target: null, duration: 0 };
+    }
+    if (g92reset) {
+      const reset = () => {
+        apply();
+        m.g92 = { x: 0, y: 0, z: 0 };
+      };
+      return { apply: reset, target: null, duration: 0 };
+    }
     if (dwell !== null) return { apply, target: null, duration: (dwell * 1000) / speedup };
     if (Object.keys(axes).length === 0) return { apply, target: null, duration: 0 };
     const start = { ...m.pos };
     const target = { ...start };
-    for (const k of Object.keys(axes)) target[k] = relative ? start[k] + axes[k] : axes[k];
+    for (const k of Object.keys(axes)) target[k] = relative ? start[k] + axes[k] : axes[k] + m.wco[k] + m.g92[k];
     const d = Math.hypot(target.x - start.x, target.y - start.y, target.z - start.z);
     const rate = motion === 0 ? RAPID_MM_MIN : feed;
     return { apply, target, duration: ((d / rate) * 60000) / speedup };
@@ -151,8 +184,9 @@ export function startMockFluidNC({ port = 8081, host = '127.0.0.1', speedup = 20
       if (m.state === 'Run') m.state = 'Idle';
       return;
     }
-    if (item.reply) {
-      // errors and system replies keep their place in the response order
+    if (item.reply || item.run) {
+      // errors and system commands keep their place in the response order
+      item.run?.();
       m.current = { item, target: null, duration: 0, elapsed: 0 };
       setImmediate(finishCurrent);
       return;
@@ -217,6 +251,18 @@ export function startMockFluidNC({ port = 8081, host = '127.0.0.1', speedup = 20
     log(`soft reset${wasMoving ? ' during motion -> Alarm' : ''}`);
   };
 
+  // $H with the repo's config.yaml: X/Y (cycle -1) take MPos 0 without moving,
+  // Z (cycle 1, servo) jumps to its mpos_mm. Homing also clears an alarm.
+  const home = () => {
+    if (homeXY) {
+      m.pos.x = 0;
+      m.pos.y = 0;
+    }
+    m.pos.z = PEN_UP_Z;
+    if (m.state === 'Alarm') m.state = 'Idle';
+    log(`homed${homeXY ? ' X Y' : ''} Z`);
+  };
+
   const system = (ws, cmd) => {
     if (cmd === '$X') {
       if (m.state === 'Alarm') {
@@ -238,7 +284,10 @@ export function startMockFluidNC({ port = 8081, host = '127.0.0.1', speedup = 20
       out(ws, `[GC:G${m.motion} G54 G17 ${m.inches ? 'G20' : 'G21'} ${m.relative ? 'G91' : 'G90'} G94 M5 M9 T0 F${m.feed} S0]`);
       return 'ok';
     }
-    if (cmd === '$H') return 'error:5';
+    if (cmd === '$H') {
+      home();
+      return 'ok';
+    }
     return 'error:3';
   };
 
@@ -250,6 +299,7 @@ export function startMockFluidNC({ port = 8081, host = '127.0.0.1', speedup = 20
     if (parsed.kind === 'system') {
       // $X must work while in Alarm, which blocks the motion queue.
       if (m.state === 'Alarm') return out(ws, system(ws, parsed.cmd));
+      if (parsed.cmd === '$H') return enqueue({ ws, run: home });
       return enqueue({ ws, reply: system(ws, parsed.cmd) });
     }
     if (m.state === 'Alarm') return out(ws, 'error:9');
@@ -310,6 +360,7 @@ function parseArgs(argv) {
     if (key === 'port') opts.port = Number(value);
     else if (key === 'host') opts.host = value;
     else if (key === 'speedup') opts.speedup = Number(value);
+    else if (key === 'home-xy') opts.homeXY = value !== 'false';
   }
   return opts;
 }

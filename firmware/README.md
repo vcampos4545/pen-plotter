@@ -302,10 +302,13 @@ Do these in order, with no pen in the holder.
    are no limit switches), and soft limits count 0 to 400 mm from there. With the power
    off, slowly move the pen carriage and the tray by hand so the pen sits over the
    paper's X0 Y0 corner. That is the bottom-left corner in the app by default
-   (Settings: origin corner).
+   (Settings: origin corner). If you miss, or the paper moves later, there is no need to
+   power off: jog the pen to the corner and press **Set origin** in the app's Machine
+   panel (see [Set origin](#set-origin)).
 4. **Power on and connect.** Turn on 12 V, then check the boot log over USB (`$SS`) for
-   errors and the two "driver test passed" lines. Run `$H` once. It only "homes" the
-   servo, which lifts the pen to Z5.
+   errors and the two "driver test passed" lines. Run `$H` once. It "homes" the servo,
+   which lifts the pen to Z5, and makes the current spot machine X0 Y0 (which it already
+   is right after power-on).
 5. **Jog X a short way.** `$J=G91 G21 X10 F1000`. The pen should move 10 mm toward the
    right edge of the drawing (+X). If it moved the other way, change X's direction pin
    in `config.yaml` from `gpio.26` to `gpio.26:low`, upload, `$Bye`. (Or, with the power
@@ -334,13 +337,53 @@ Do these in order, with no pen in the holder.
     `80`, path `/`. Draw a small square near the origin and send it.
 
 After a soft reset from the app's Stop button, positions are kept. After a power cycle,
-repeat step 3 before drawing.
+repeat step 3 before drawing, or jog to the corner and press Set origin.
+
+## Set origin
+
+The app's **Set origin** button (Machine panel) makes the pen's current spot X0 Y0. It
+sends, one line at a time:
+
+```
+G10 L2 P0 X0 Y0     zero the work offset on X and Y
+G92.1               clear any G92 offset
+$H                  set X/Y machine position to 0 here, lift the pen
+```
+
+Soft limits are checked against the **machine** position (MPos), not the work position.
+A work offset alone (`G10 L20` or `G92`) would make the pen read X0 Y0 while the limits
+still counted 0 to 400 mm from the power-on spot. Drawings near the far edge would then
+be refused, and work coordinates below 0 would still be allowed. FluidNC v4.1.1 has no
+`$` command that sets MPos. The one thing that does, without moving, is a homing cycle of
+`-1` ("set position only", `Homing::run_cycles` in `FluidNC/src/Machine/Homing.cpp`),
+which assigns `mpos_mm` (0 here) to the axis. That is why `config.yaml` gives X and Y
+`cycle: -1`.
+
+`$H` is used rather than `$HXY`. The `-1` path itself does not resync FluidNC's G-code
+parser and planner with the new position. In `$H` the Z servo cycle runs afterwards and
+its `Homing::done()` does that resync. `$HX`/`$HY` would return before it, and the next
+move would travel by the old distance. `allow_single_axis: false` keeps those refused.
+
+Side effect: any `$H` now makes the current spot X0 Y0, not just the one after power-on.
+
+Caution: there are no switches, so the controller cannot know where the frame really
+ends. After Set origin the 0 to 400 mm window starts at the pen. If you set the origin
+partway along an axis, the window reaches past the real far end by that much. Set it at
+or near the X0/Y0 end of travel, as in step 3, and keep drawings inside the paper.
+
+**This needs the current `config.yaml` on the controller.** If you set up the plotter
+before this change, upload `config.yaml` again and restart with `$Bye` (see
+[Uploading config.yaml](#uploading-configyaml)). With an older config (X/Y `cycle: 0`),
+`$H` only lifts the pen. The app sees that the machine position did not change, sets the
+origin with a work offset (`G10 L20 P0 X0 Y0`) instead, and shows a message with the X
+and Y range that is still reachable from the new origin.
 
 ## Adding limit switches later
 
-The config has no switches, so homing is off for X and Y. The `homing:` sections that
-are there only set the soft-limit range to 0 to 400 mm. To home against switches at the
-X0 and Y0 ends:
+The config has no switches, so X and Y never move when homing. Their `homing:` sections
+set the soft-limit range to 0 to 400 mm, and `cycle: -1` lets `$H` (and the app's Set
+origin) set their position where they stand. To home against switches at the X0 and Y0
+ends instead:
 
 1. Wire each switch to an input pin. GPIO34 and GPIO35 are input-only and ideal, but
    have no internal pull-up: add a 10 kΩ to 3.3 V. GPIO4 or GPIO13 can use the internal
@@ -388,7 +431,8 @@ and enum values, but not whether a GPIO exists on your board.
   are conservative starting points. Tune them on the machine.
 - **Pen lift.** The servo swings about 45° (1000 to 1500 µs) between down and up. Your
   pen holder will need its own values (checklist step 8).
-- **Position.** Without switches, X0 Y0 is wherever the machine is at power-on.
+- **Position.** Without switches, X0 Y0 is wherever the machine is at power-on, or
+  where the pen was at the last `$H` / Set origin.
 - **Motors stay enabled.** `idle_ms: 255` keeps the steppers energised at `hold_amps`
   between moves, so the axes can't be pushed out of position. Motors get warm at rest.
   Set a delay in milliseconds instead if you'd rather they switch off when idle.

@@ -3,6 +3,7 @@ import { Drawing, fromJSON, fromSVG, loadDrawing, newId, saveDrawing, toJSON, to
 import { clampPoint, dist, distToPolyline, drawableRect, type Point, type Polyline } from './geometry';
 import { fmt, fromMachine } from './gcode';
 import { buildJob, type Job } from './job';
+import { describeOrigin, OriginSetter, type OriginProgress } from './origin';
 import { workPosition, type Axes, type StatusReport } from './protocol';
 import {
   DEFAULT_SETTINGS,
@@ -32,6 +33,7 @@ let jobKey = '';
 let planTimer: ReturnType<typeof setTimeout> | undefined;
 
 let streamer: Streamer | undefined;
+let originSetter: OriginSetter | undefined;
 let machineState = '';
 let lastWco: Axes | undefined;
 /** Last reported pen position in machine mm, shown on the sheet while connected. */
@@ -283,6 +285,7 @@ const conn = new FluidNCConnection({
     if (streamer?.active && (conn.connState === 'error' || conn.connState === 'disconnected')) {
       streamer.connectionLost();
     }
+    if (conn.connState === 'error' || conn.connState === 'disconnected') originSetter?.connectionLost();
     updateIndicator();
     updateControls();
   },
@@ -290,6 +293,7 @@ const conn = new FluidNCConnection({
   onLine: (line) => {
     logLine(line);
     streamer?.handleLine(line);
+    originSetter?.handleLine(line);
   },
 });
 
@@ -368,8 +372,11 @@ function logLine(line: string, kind: 'in' | 'out' | 'info' = 'in'): void {
   if (atBottom) consoleEl.scrollTop = consoleEl.scrollHeight;
 }
 
+/** A job or the Set origin sequence owns the controller. */
+const machineBusy = () => !!streamer?.active || !!originSetter?.active;
+
 function sendCommand(line: string): void {
-  if (!conn.isConnected || streamer?.active) return;
+  if (!conn.isConnected || machineBusy()) return;
   if (conn.sendLine(line)) logLine(line, 'out');
 }
 
@@ -388,6 +395,45 @@ $('home-btn').addEventListener('click', () => {
   sendCommand(`G21 G90 G0 Z${fmt(settings.penUpZ)}`);
   sendCommand('G0 X0 Y0');
 });
+$('origin-btn').addEventListener('click', () => {
+  if (!conn.isConnected || machineBusy()) return;
+  if (machineState !== 'Idle') {
+    alert(
+      machineState === 'Alarm'
+        ? 'The machine is in Alarm. Press Unlock ($X) first.'
+        : `The machine is ${machineState || 'not reporting its state'}. Wait until it is Idle.`,
+    );
+    return;
+  }
+  if (!confirm('Make the pen\'s current position X0 Y0? The pen lifts, and drawings and the travel limits count from this spot.')) return;
+  logLine('setting origin at the current position', 'info');
+  originSetter = new OriginSetter(
+    (l) => {
+      if (conn.sendLine(l)) logLine(l, 'out');
+    },
+    { onUpdate: renderOrigin },
+  );
+  originSetter.start();
+});
+
+function renderOrigin(p: OriginProgress): void {
+  if (p.state === 'done' && p.result) {
+    // FluidNC only repeats WCO every tenth status report, so update it here
+    // rather than showing a stale offset for several seconds.
+    const z = lastWco?.[2] ?? 0;
+    const o = p.result.mode === 'offset' ? p.result.offset : { x: 0, y: 0 };
+    lastWco = o ? [o.x, o.y, z] : undefined;
+    headPos = { x: 0, y: 0 };
+    render();
+    const msg = describeOrigin(p.result);
+    logLine(msg, 'info');
+    if (p.result.mode === 'offset') alert(msg);
+  } else if (p.state === 'failed') {
+    logLine(`set origin failed: ${p.error}`, 'info');
+    alert(`Set origin failed: ${p.error}`);
+  }
+  updateControls();
+}
 
 // ---- job ----------------------------------------------------------------
 
@@ -416,7 +462,7 @@ function renderJob(p: StreamProgress): void {
 }
 
 $('send-btn').addEventListener('click', () => {
-  if (!conn.isConnected || streamer?.active) return;
+  if (!conn.isConnected || machineBusy()) return;
   const j = currentJob();
   if (!j.bounds.ok) {
     alert('Some strokes are outside the drawable area. Nothing was sent.');
@@ -456,15 +502,18 @@ $('download-btn').addEventListener('click', () => {
 function updateControls(): void {
   const st = streamer?.progress.state;
   const active = !!streamer?.active;
+  const busy = machineBusy();
   const outOfBounds = !!job && jobKey === currentJobKey() && !job.bounds.ok;
-  const canSend = conn.isConnected && !active && drawing.strokes.length > 0 && !outOfBounds;
+  const canSend = conn.isConnected && !busy && drawing.strokes.length > 0 && !outOfBounds;
   $<HTMLButtonElement>('send-btn').disabled = !canSend;
   $<HTMLButtonElement>('download-btn').disabled = drawing.strokes.length === 0;
   $('send-hint').textContent = !conn.isConnected
     ? 'Connect to the plotter to send.'
     : active
       ? 'A job is running.'
-      : drawing.strokes.length === 0
+      : busy
+        ? 'Setting the origin.'
+        : drawing.strokes.length === 0
         ? 'Draw something first.'
         : outOfBounds
           ? 'The drawing is out of bounds.'
@@ -472,8 +521,8 @@ function updateControls(): void {
   $<HTMLButtonElement>('pause-btn').disabled = !(st === 'running' || st === 'draining');
   $<HTMLButtonElement>('resume-btn').disabled = st !== 'paused';
   $<HTMLButtonElement>('stop-btn').disabled = !active || st === 'stopping';
-  for (const b of document.querySelectorAll<HTMLButtonElement>('.machine-cmd')) b.disabled = !conn.isConnected || active;
-  $<HTMLInputElement>('console-input').disabled = !conn.isConnected || active;
+  for (const b of document.querySelectorAll<HTMLButtonElement>('.machine-cmd')) b.disabled = !conn.isConnected || busy;
+  $<HTMLInputElement>('console-input').disabled = !conn.isConnected || busy;
   $<HTMLButtonElement>('undo-btn').disabled = !drawing.canUndo;
   $<HTMLButtonElement>('redo-btn').disabled = !drawing.canRedo;
   $<HTMLButtonElement>('clear-btn').disabled = drawing.strokes.length === 0;
