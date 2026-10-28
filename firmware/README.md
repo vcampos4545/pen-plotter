@@ -315,8 +315,9 @@ Do these in order, with no pen in the holder.
    off, swap the two wires of one coil.) Jog back with `X-10`.
 6. **Jog Y a short way.** `$J=G91 G21 Y10 F1000`. +Y must move the pen 10 mm **toward the
    top edge of the drawing, relative to the paper**. Because Y moves the tray, not the
-   pen, the tray itself moves the opposite way: toward the bottom edge. If it is wrong,
-   use `gpio.32:low` for Y's direction pin.
+   pen, the tray itself moves the opposite way: toward the bottom edge. `config.yaml`
+   already inverts Y (`direction_pin: gpio.32:low`), because +Y ran backwards on this
+   machine. If it is wrong on yours, change it back to `gpio.32`, upload, `$Bye`.
 7. **Check distance (steps/mm).** Mark the carriage, jog `X100`, and measure with a
    ruler. It should be 100 mm. Small errors come from belt tension or pulley size: set
    `steps_per_mm = 80 × 100 / measured`. An error of exactly 2× or ½× means the UART

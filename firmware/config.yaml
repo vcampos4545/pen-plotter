@@ -140,8 +140,9 @@ axes:
         run_mode: StealthChop
         homing_mode: StealthChop
         step_pin: gpio.33
-        # If Y moves the wrong way, change this to  gpio.32:low.
-        direction_pin: gpio.32
+        # Inverted (:low) because +Y ran backwards on this machine. If Y moves the
+        # wrong way on yours, change this back to  gpio.32.
+        direction_pin: gpio.32:low
 
   # Pen lift. FluidNC maps the axis range 0..max_travel_mm onto the servo pulse
   # range: Z0 sends min_pulse_us (pen down), Z5 sends max_pulse_us (pen up).
