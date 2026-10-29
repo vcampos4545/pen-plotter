@@ -43,6 +43,7 @@
           <button type="button" id="photo-btn" title="Turn a photo into lines">◐<span>Photo</span></button>
           <button type="button" id="streets-btn" title="Roads, rivers and coastlines from OpenStreetMap">▦<span>Streets</span></button>
           <button type="button" id="gen-btn" title="Spirographs, harmonographs, strange attractors, flow fields and mazes">∿<span>Generate</span></button>
+          <button type="button" id="text-btn" title="Lettering in single-stroke or outline fonts, filled, bent and shadowed">Aa<span>Text</span></button>
         </div>
       </nav>
 
@@ -481,6 +482,109 @@
           <div class="row topo-actions">
             <button type="button" id="gen-insert" class="send" disabled>Add to drawing</button>
             <button type="button" id="gen-cancel">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="text-dialog" class="topo-dialog" aria-labelledby="text-title">
+      <header class="topo-head">
+        <h2 id="text-title">Text</h2>
+        <p class="hint">Single-stroke fonts draw cleanest. Outline fonts can be filled. The text becomes ordinary lines once added.</p>
+        <button type="button" id="text-close" aria-label="Close">✕</button>
+      </header>
+      <div class="topo-body">
+        <div class="gen-stage">
+          <canvas id="text-preview" aria-label="Preview of the lines on the sheet"></canvas>
+        </div>
+        <div class="topo-side">
+          <form id="text-form" class="settings">
+            <label for="text-text" class="wide">Text</label>
+            <textarea id="text-text" name="text" rows="3" maxlength="2000" class="wide" spellcheck="false"></textarea>
+            <label for="text-font">Font</label>
+            <select id="text-font" name="font">
+              <optgroup label="Single-stroke">
+                <option value="hershey-sans">Hershey Sans</option>
+                <option value="hershey-sans-bold">Hershey Sans Bold</option>
+                <option value="hershey-serif">Hershey Serif</option>
+                <option value="hershey-serif-italic">Hershey Serif Italic</option>
+                <option value="hershey-script">Hershey Script</option>
+                <option value="hershey-cursive">Hershey Cursive</option>
+                <option value="hershey-gothic">Hershey Gothic</option>
+              </optgroup>
+              <optgroup label="Outline">
+                <option value="bebas-neue">Bebas Neue</option>
+                <option value="abril-fatface">Abril Fatface</option>
+                <option value="bungee">Bungee</option>
+                <option value="pacifico">Pacifico</option>
+              </optgroup>
+            </select>
+            <span class="hint" id="text-font-name">TTF, OTF or WOFF from this computer</span>
+            <button type="button" id="text-load-font">Load font…</button>
+            <input type="file" id="text-file" accept=".ttf,.otf,.woff,font/ttf,font/otf,font/woff" hidden />
+            <label for="text-size" title="Height of a capital letter">Letter height (mm)</label>
+            <input type="number" id="text-size" name="size" min="1" max="500" step="1" />
+            <label for="text-ls" title="Extra gap between letters. Negative squeezes them together">Letter spacing (mm)</label>
+            <input type="number" id="text-ls" name="letterSpacing" min="-50" max="100" step="0.5" />
+            <label for="text-lh" title="Baseline to baseline, times the font's own line height">Line height (×)</label>
+            <input type="number" id="text-lh" name="lineHeight" min="0.3" max="5" step="0.05" />
+            <label for="text-align">Align</label>
+            <select id="text-align" name="align">
+              <option value="left">Left</option>
+              <option value="center">Centre</option>
+              <option value="right">Right</option>
+            </select>
+
+            <fieldset class="gen-style" data-kind="stroke">
+              <h3>Weight</h3>
+              <label for="text-sp" title="Parallel copies drawn to each side of every stroke">Extra passes each side</label>
+              <input type="number" id="text-sp" name="strokePasses" min="0" max="10" step="1" />
+              <label for="text-sg" title="About a pen width packs them into a solid line">Pass gap (mm)</label>
+              <input type="number" id="text-sg" name="strokeGap" min="0.05" max="5" step="0.05" />
+            </fieldset>
+            <fieldset class="gen-style" data-kind="outline" hidden>
+              <h3>Outline and fill</h3>
+              <label for="text-outline">Draw the outline</label>
+              <input type="checkbox" id="text-outline" name="outline" />
+              <label for="text-op" title="More outlines grown outwards: a bold or double outline">Extra outlines</label>
+              <input type="number" id="text-op" name="outlinePasses" min="0" max="10" step="1" />
+              <label for="text-og">Outline gap (mm)</label>
+              <input type="number" id="text-og" name="outlineGap" min="0.1" max="10" step="0.1" />
+              <label for="text-fill">Fill</label>
+              <select id="text-fill" name="fill">
+                <option value="none">None</option>
+                <option value="hatch">Hatch</option>
+                <option value="crosshatch">Crosshatch</option>
+                <option value="inset">Inset rings</option>
+                <option value="wave">Wavy lines</option>
+                <option value="spiral">Spiral</option>
+                <option value="flow">Flow field</option>
+              </select>
+              <label for="text-spacing" title="Gap between fill lines. Also used for the shadow's hatching">Fill spacing (mm)</label>
+              <input type="number" id="text-spacing" name="spacing" min="0.2" max="20" step="0.1" />
+              <label for="text-angle" title="Direction of hatching and wavy lines">Fill angle (°)</label>
+              <input type="number" id="text-angle" name="angle" min="-360" max="360" step="5" />
+            </fieldset>
+
+            <h3>Effects</h3>
+            <label for="text-arc" title="Bend the text round a circle: degrees of arc for the widest line. Negative curves down">Arc (°)</label>
+            <input type="number" id="text-arc" name="arc" min="-360" max="360" step="5" />
+            <label for="text-wa" title="0 turns the wave off">Wave height (mm)</label>
+            <input type="number" id="text-wa" name="waveAmplitude" min="-200" max="200" step="0.5" />
+            <label for="text-wl">Wave length (mm)</label>
+            <input type="number" id="text-wl" name="waveLength" min="1" max="2000" step="5" />
+            <label for="text-slant" title="Lean the letters. Positive leans right">Slant (°)</label>
+            <input type="number" id="text-slant" name="slant" min="-60" max="60" step="1" />
+            <label for="text-taper" title="Letters grow from left to right (or shrink, negative), like perspective">Perspective (%)</label>
+            <input type="number" id="text-taper" name="taper" min="-90" max="90" step="5" />
+            <label for="text-shadow" title="A hatched shadow down and to the right. 0 turns it off">Drop shadow (mm)</label>
+            <input type="number" id="text-shadow" name="shadow" min="0" max="50" step="0.5" />
+          </form>
+          <div id="text-status" class="job-text" role="status" aria-live="polite"></div>
+          <div id="text-warning" class="warn" hidden></div>
+          <div class="row topo-actions">
+            <button type="button" id="text-insert" class="send" disabled>Add to drawing</button>
+            <button type="button" id="text-cancel">Cancel</button>
           </div>
         </div>
       </div>

@@ -46,6 +46,8 @@ npm run build      # typecheck and production build into dist/
   map. See [Street maps](#street-maps) below.
 - **Generate** makes math art: spirographs, harmonographs, strange attractors, flow
   fields and mazes. See [Generate](#generate) below.
+- **Text** draws lettering in single-stroke or outline fonts, filled, bent and
+  shadowed. See [Text](#text) below.
 - **Send to Plotter** runs flatten → simplify → optimize → G-code → stream. It is
   disabled unless the indicator says Connected and the drawing is inside the margin.
   **Download G-code** saves the same program to a file.
@@ -298,6 +300,43 @@ presets and random chaotic parameters), `src/flowfield.ts` (streamlines and
 separation), `src/maze.ts` (generation, solving, wall merging) and `src/generate.ts`
 (options, fitting, the pipeline and Randomize). `src/generate-ui.ts` is the dialog
 wiring and loads only when **Generate** is first opened.
+
+### Text
+
+![The Text dialog: Pacifico on an arc, hatched, with an extra outline and a drop shadow](docs/images/text-tool.png)
+
+1. Press **Text** and type. New lines in the box start new lines of text. The preview,
+   estimate and warnings work as in Generate.
+2. Pick a **Font**. *Single-stroke* fonts are seven Hershey fonts (sans, sans bold,
+   serif, serif italic, script, cursive, gothic): each letter is a few pen strokes,
+   which is what a plotter draws best. *Outline* fonts are Bebas Neue, Abril Fatface,
+   Bungee and Pacifico, or **Load font…** for a TTF, OTF or WOFF on this computer
+   (kept for this visit only). **Letter height** is the height of a capital in mm.
+   *Letter spacing*, *Line height* and *Align* set out the block.
+3. Style it:
+   - Single-stroke fonts: *Extra passes each side* draws parallel copies of every
+     stroke, *Pass gap* apart, for a heavier line.
+   - Outline fonts: *Draw the outline*, plus *Extra outlines* grown outwards by the
+     *Outline gap* for a bold or double outline. *Fill* is none, hatch, crosshatch,
+     inset rings (the outline repeated inwards), wavy lines, a spiral, or a flow field,
+     all *Fill spacing* apart; hatch and wavy lines run at *Fill angle*. Fills follow
+     the font's own nonzero rule, so the holes in letters like O and A stay empty.
+   - Effects, for either kind: *Arc* bends the text round a circle (degrees of arc for
+     the widest line; negative curves down), *Wave height* and *Wave length* make it
+     ripple, *Slant* leans it, *Perspective* grows the letters along the line, and
+     *Drop shadow* adds a hatched shadow down and to the right that stops short of
+     the letters.
+4. Press **Add to drawing**. The text becomes ordinary strokes, added as one undo step,
+   and can't be edited as text afterwards.
+
+The block is centred in the drawable area and shrunk to fit if it is too big; the
+dialog says by how much. Layout runs in a Web Worker. The settings are remembered; a
+loaded font file is not. The tested parts are `src/hershey.ts` (the Hershey `.jhf`
+format), `src/outline-font.ts` (opentype.js glyphs to contours), `src/text-layout.ts`
+(layout and the bends), `src/text-fill.ts` (exact hatching, the signed distance field
+behind insets, extra outlines and clipping, stroke offsets) and `src/text.ts` (options
+and the pipeline). Font data and licences are in [`src/fonts/`](src/fonts/).
+`src/text-ui.ts` is the dialog wiring and loads only when **Text** is first opened.
 
 ### Connection indicator
 
