@@ -573,8 +573,26 @@ progress {
 }
 
 #photo-form,
-#gen-form {
+#gen-form,
+#text-form {
   grid-template-columns: 1fr 140px;
+}
+
+#text-form .wide {
+  grid-column: 1 / -1;
+}
+
+#text-form textarea {
+  font: inherit;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  resize: vertical;
+}
+
+#text-form .hint {
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 #photo-form output,
@@ -596,11 +614,13 @@ fieldset.gen-style[hidden] {
 }
 
 #photo-status,
-#gen-status {
+#gen-status,
+#text-status {
   white-space: pre-line;
 }
 
 #photo-status.failed,
-#gen-status.failed {
+#gen-status.failed,
+#text-status.failed {
   color: var(--danger);
 }

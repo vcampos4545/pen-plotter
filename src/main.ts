@@ -640,6 +640,15 @@ $('gen-btn').addEventListener('click', async () => {
   }
 });
 
+$('text-btn').addEventListener('click', async () => {
+  try {
+    const { openText } = await import('./text-ui');
+    openText(sheetHost);
+  } catch (err) {
+    alert(`Could not open the Text tool: ${(err as Error).message}`);
+  }
+});
+
 // ---- keyboard -----------------------------------------------------------
 
 const TOOL_KEYS: Record<string, Tool> = { p: 'freehand', l: 'line', r: 'rect', o: 'ellipse', e: 'eraser' };

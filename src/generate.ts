@@ -162,7 +162,7 @@ export function fitLines(lines: Polyline[], area: Rect): Polyline[] {
 }
 
 /** Simplify, round to 0.01 mm (keeps saved drawings small) and keep inside the area. */
-function finish(lines: Polyline[], area: Rect): Polyline[] {
+export function finish(lines: Polyline[], area: Rect): Polyline[] {
   const r = (n: number) => Math.round(n * 100) / 100;
   return lines
     .map((l) => dedupe(simplifyRDP(l, SIMPLIFY).map((p) => clampPoint({ x: r(p.x), y: r(p.y) }, area))))
