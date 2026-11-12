@@ -11,6 +11,8 @@
 //   - work offsets: G10 L2 / L20 (one coordinate system), G92.1; status reports
 //     carry MPos, plus WCO on the first report and every 10th after it
 //   - "$X" unlocks, "$$" / "$I" / "$G" print a little
+//   - a dropped client loses its unparsed input, but lines it already sent keep
+//     running, like FluidNC's WSChannels::removeChannel (the planner is not held)
 //   - "$H" models firmware/config.yaml: X/Y homing cycle -1 sets their MPos to 0
 //     where they stand, then the Z servo "homes" to Z5. With homeXY false it
 //     models an older config (X/Y cycle 0): $H only lifts the pen.
@@ -70,6 +72,7 @@ export function startMockFluidNC({ port = 8081, host = '127.0.0.1', speedup = 20
     inches: false,
     queue: [],
     current: null, // { item, start, target, duration, elapsed, runningSince, timer }
+    moves: [], // every completed move as { from, to } in machine coordinates, for tests
   };
   const clients = new Map(); // ws -> { id, lineBuf, outBuf, flushTimer }
   let nextId = 0;
@@ -172,7 +175,10 @@ export function startMockFluidNC({ port = 8081, host = '127.0.0.1', speedup = 20
   const finishCurrent = () => {
     const cur = m.current;
     m.current = null;
-    if (cur.target) m.pos = cur.target;
+    if (cur.target) {
+      m.moves.push({ from: cur.start, to: cur.target });
+      m.pos = cur.target;
+    }
     out(cur.item.ws, cur.item.reply ?? 'ok');
     runNext();
   };
@@ -341,6 +347,10 @@ export function startMockFluidNC({ port = 8081, host = '127.0.0.1', speedup = 20
       resolve({
         port: wss.address().port,
         machine: m,
+        /** Cut every client off without a close handshake, like a WiFi drop. */
+        dropClients: () => {
+          for (const ws of clients.keys()) ws.terminate();
+        },
         close: () =>
           new Promise((done) => {
             if (m.current) clearTimeout(m.current.timer);
