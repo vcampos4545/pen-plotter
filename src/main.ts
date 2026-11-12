@@ -280,12 +280,20 @@ drawing.onChange(() => {
 
 // ---- connection ---------------------------------------------------------
 
+let lastConnLog = '';
 const conn = new FluidNCConnection({
-  onState: () => {
-    if (streamer?.active && (conn.connState === 'error' || conn.connState === 'disconnected')) {
-      streamer.connectionLost();
+  onState: (state, detail) => {
+    const down = state === 'error' || state === 'disconnected';
+    if (down) streamer?.connectionLost();
+    else if (state === 'connected') streamer?.connectionRestored();
+    if (down) originSetter?.connectionLost();
+    // Timestamped link changes in the console, so a drop mid-job leaves a record
+    // of why (FluidNC closed it, no status reply, handshake timeout) and when.
+    const entry = `connection ${state}${detail ? `: ${detail}` : ''}`;
+    if (state !== 'connecting' && entry !== lastConnLog) {
+      lastConnLog = entry;
+      logLine(`${new Date().toLocaleTimeString()} ${entry}`, 'info');
     }
-    if (conn.connState === 'error' || conn.connState === 'disconnected') originSetter?.connectionLost();
     updateIndicator();
     updateControls();
   },
@@ -325,7 +333,18 @@ function updateIndicator(): void {
   const streaming = streamer?.active && conn.connState !== 'error' && conn.connState !== 'disconnected';
   const state = streaming ? 'streaming' : conn.connState;
   let detail = conn.stateDetail;
-  if (streaming) detail = st === 'paused' ? 'Paused' : st === 'stopping' ? 'Stopping…' : `to ${settings.host}`;
+  if (streaming) {
+    detail =
+      st === 'paused'
+        ? 'Paused'
+        : st === 'stopping'
+          ? 'Stopping…'
+          : st === 'interrupted'
+            ? 'Interrupted, press Resume'
+            : st === 'resyncing'
+              ? 'Resuming…'
+              : `to ${settings.host}`;
+  }
   else if (state === 'connected') detail = conn.currentUrl;
   $('conn').dataset.state = state;
   $('conn-label').textContent = LABELS[state];
@@ -352,7 +371,7 @@ $('connect-btn').addEventListener('click', () => {
   if (conn.connState === 'disconnected') {
     connect();
   } else {
-    if (streamer?.active && !confirm('A job is running. Disconnecting stops streaming but the machine will finish its buffered moves. Disconnect anyway?')) return;
+    if (streamer?.active && !confirm('A job is running. Disconnecting stops streaming but the machine will finish its buffered moves. You can resume the job after reconnecting. Disconnect anyway?')) return;
     localStorage.setItem(AUTOCONNECT_KEY, '0');
     conn.disconnect();
   }
@@ -445,20 +464,35 @@ function renderJob(p: StreamProgress): void {
     paused: 'Paused',
     draining: 'All lines acknowledged, finishing moves',
     stopping: 'Stopping: soft reset sent',
+    reconnecting: 'Reconnecting',
+    interrupted: 'Interrupted',
+    resyncing: 'Resuming',
     done: 'Done',
     stopped: 'Stopped, pen lifted',
     failed: 'Failed',
     idle: 'Ready',
   };
   const text = $('job-text');
-  text.textContent = `${words[p.state]} · ${p.sent}/${p.total} sent · ${p.acked}/${p.total} acked · ${pct}%${p.error ? `\n${p.error}` : ''}`;
+  const extra = [p.note, p.error].filter(Boolean).map((t) => `\n${t}`).join('');
+  text.textContent = `${words[p.state]} · ${p.sent}/${p.total} sent · ${p.acked}/${p.total} acked · ${pct}%${extra}`;
   text.classList.toggle('failed', p.state === 'failed');
+  const prev = text.dataset.state;
   text.dataset.state = p.state;
-  if (p.state === 'done' || p.state === 'stopped' || p.state === 'failed') {
-    logLine(`job ${p.state}${p.error ? `: ${p.error}` : ''}`, 'info');
+  if (p.state === 'done' || p.state === 'stopped' || p.state === 'failed' || (p.state !== prev && p.note)) {
+    const msg = [p.note, p.error].filter(Boolean).join('; ');
+    logLine(`${new Date().toLocaleTimeString()} job ${p.state}${msg ? `: ${msg}` : ''}`, 'info');
   }
+  if (p.state === 'reconnecting' && prev !== 'reconnecting' && streamer) logDropContext(streamer.lines, p);
   updateIndicator();
   updateControls();
+}
+
+/** Log the lines around a mid-job drop, to compare where repeated drops happen. */
+function logDropContext(lines: readonly string[], p: StreamProgress): void {
+  const from = Math.max(0, p.acked - 3);
+  const to = Math.min(lines.length, p.sent + 2);
+  const window = lines.slice(from, to).map((l, i) => `${from + i + 1}${from + i < p.acked ? ' ok' : from + i < p.sent ? ' ..' : '   '} ${l}`);
+  logLine(`drop at ${p.acked}/${p.total} acked, ${p.sent} sent:\n${window.join('\n')}`, 'info');
 }
 
 $('send-btn').addEventListener('click', () => {
@@ -480,6 +514,12 @@ $('send-btn').addEventListener('click', () => {
     {
       maxInFlight: settings.maxInFlight,
       penUpLine: `G21 G90 G0 Z${fmt(settings.penUpZ)}`,
+      resume: {
+        penUpZ: settings.penUpZ,
+        penDwell: settings.penDwell,
+        travelUseG1: settings.travelUseG1,
+        travelFeed: settings.travelFeed,
+      },
       onUpdate: renderJob,
     },
   );
@@ -519,7 +559,7 @@ function updateControls(): void {
           ? 'The drawing is out of bounds.'
           : `Ready to send to ${settings.host}.`;
   $<HTMLButtonElement>('pause-btn').disabled = !(st === 'running' || st === 'draining');
-  $<HTMLButtonElement>('resume-btn').disabled = st !== 'paused';
+  $<HTMLButtonElement>('resume-btn').disabled = !(st === 'paused' || (st === 'interrupted' && streamer?.canResume));
   $<HTMLButtonElement>('stop-btn').disabled = !active || st === 'stopping';
   for (const b of document.querySelectorAll<HTMLButtonElement>('.machine-cmd')) b.disabled = !conn.isConnected || busy;
   $<HTMLInputElement>('console-input').disabled = !conn.isConnected || busy;

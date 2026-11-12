@@ -137,7 +137,10 @@ export class FluidNCConnection {
     };
     ws.onclose = (ev: CloseEvent) => {
       if (this.ws !== ws) return;
-      this.fail(ev.reason ? `Connection closed: ${ev.reason}` : 'Connection closed');
+      // The code tells a clean close (1000/1005, e.g. FluidNC dropping a client
+      // whose send queue filled) from a dead link or reboot (1006).
+      const code = ev.code ? ` (code ${ev.code})` : '';
+      this.fail(ev.reason ? `Connection closed${code}: ${ev.reason}` : `Connection closed${code}`);
     };
     // onclose always follows onerror; handle the outcome there.
     ws.onerror = () => {};

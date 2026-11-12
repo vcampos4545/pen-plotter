@@ -7,9 +7,11 @@ import { OFFSET_ORIGIN_LINE, OriginSetter, SET_ORIGIN_LINES } from '../src/origi
 import { Streamer, type StreamProgress } from '../src/streamer';
 import { parseLine, startMockFluidNC } from '../sim/mock-fluidnc.mjs';
 
+type Xyz = { x: number; y: number; z: number };
 interface Sim {
   port: number;
-  machine: { state: string; pos: { x: number; y: number; z: number }; wco: { x: number; y: number; z: number } };
+  machine: { state: string; pos: Xyz; wco: Xyz; moves: { from: Xyz; to: Xyz }[] };
+  dropClients(): void;
   close(): Promise<void>;
 }
 
@@ -74,7 +76,11 @@ describe('connection + streamer against the simulator', () => {
       timeoutMs: 1000,
       backoffMinMs: 50,
       backoffMaxMs: 200,
-      onState: (s) => states.push(s),
+      onState: (s) => {
+        states.push(s);
+        if (s === 'error' || s === 'disconnected') streamer?.connectionLost();
+        else if (s === 'connected') streamer?.connectionRestored();
+      },
       onLine: (l) => {
         lines.push(l);
         streamer?.handleLine(l);
@@ -101,7 +107,13 @@ describe('connection + streamer against the simulator', () => {
         },
         sendRealtime: (c) => conn.sendRealtime(c),
       },
-      { maxInFlight, penUpLine: 'G21 G90 G0 Z5', resetTimeoutMs: 1500, onUpdate: (p) => updates.push(p) },
+      {
+        maxInFlight,
+        penUpLine: 'G21 G90 G0 Z5',
+        resetTimeoutMs: 1500,
+        resume: { penUpZ: 5, penDwell: 0.15, travelUseG1: false, travelFeed: 6000 },
+        onUpdate: (p) => updates.push(p),
+      },
     );
     streamer.start();
     return { updates, maxOutstanding: () => maxOutstanding };
@@ -204,6 +216,42 @@ describe('connection + streamer against the simulator', () => {
     expect(sim.machine.wco).toMatchObject({ x: 120, y: 80 });
     await runCommands(['G0 X10 Y20']);
     expect(sim.machine.pos).toMatchObject({ x: 130, y: 100 });
+  });
+
+  it('a drop mid-job reconnects, and Resume finishes the drawing with nothing skipped', async () => {
+    // A zigzag of distinct pen-down segments, slow enough to be mid-job at the drop.
+    const zigzag = Array.from({ length: 24 }, (_, i) => ({ x: 20 + (i % 2) * 200, y: 20 + i * 5 }));
+    const job = generateGcode([zigzag], {
+      drawFeed: 1500,
+      travelFeed: 6000,
+      travelUseG1: false,
+      penUpZ: 5,
+      penDownZ: 0,
+      penDwell: 0.15,
+    });
+    conn.connect(`ws://127.0.0.1:${sim.port}/`);
+    await waitFor(() => conn.isConnected);
+    startJob(job, 3);
+    await waitFor(() => streamer!.progress.acked >= 12);
+    sim.dropClients();
+    await waitFor(() => streamer!.progress.state === 'reconnecting');
+    const atDrop = streamer!.progress;
+    expect(atDrop.sent - atDrop.acked).toBeGreaterThan(0);
+
+    await waitFor(() => streamer!.canResume, 5000);
+    streamer!.resume();
+    await waitFor(() => streamer!.progress.state === 'done', 8000);
+    expect(sim.machine.pos).toEqual({ x: 0, y: 0, z: 5 });
+
+    // Every zigzag segment was drawn, and nothing else was drawn with the pen down.
+    const key = (a: Xyz, b: Xyz) => `${a.x},${a.y}->${b.x},${b.y}`;
+    const drawn = sim.machine.moves
+      .filter((m) => m.from.z === 0 && m.to.z === 0 && (m.from.x !== m.to.x || m.from.y !== m.to.y))
+      .map((m) => key(m.from, m.to));
+    const expected = zigzag.slice(1).map((p, i) => key({ ...zigzag[i], z: 0 }, { ...p, z: 0 }));
+    expect([...new Set(drawn)].sort()).toEqual([...expected].sort());
+    // In-order streaming means no segment is drawn twice here.
+    expect(drawn).toHaveLength(expected.length);
   });
 
   it('reports errors and reconnects with backoff when the server goes away', async () => {

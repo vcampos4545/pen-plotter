@@ -345,7 +345,7 @@ and the pipeline). Font data and licences are in [`src/fonts/`](src/fonts/).
 | Disconnected | Not trying to connect (you pressed Disconnect). |
 | Connecting   | Socket opening, or open but no recent reply to `?`. |
 | Connected    | Socket open and FluidNC answered a `?` status query in the last 2.5 s. |
-| Streaming    | A job is running (Paused / Stopping shown next to it). |
+| Streaming    | A job is running (Paused / Stopping / Interrupted / Resuming shown next to it). |
 | Error        | The socket failed or FluidNC stopped answering. Retries with backoff (1 s doubling to 15 s). |
 
 The app polls `?` every 500 ms and shows the machine state and position in the top bar
@@ -408,8 +408,75 @@ Checked against the FluidNC source (`FluidNC/src/WebUI/WebUIServer.cpp` and
   so once the startup banner comes back (or after 2.5 s) the app sends `$X` and then
   `G21 G90 G0 Z<pen up>` to lift the pen.
 - An `error:` or `ALARM:` reply during a job aborts it with the same sequence and shows
-  the failing line. If the socket drops mid-job, the job is marked failed. The machine
-  may still finish the few moves it had already buffered.
+  the failing line.
+- If the socket drops mid-job, the job is **not** failed. FluidNC keeps running the
+  moves it had already queued (its planner is not held when a WebSocket client goes
+  away; only that client's unparsed input is dropped). The job shows **Reconnecting**
+  for 30 s and then **Interrupted**, while the connection retries on its own. Once the
+  plotter is back, press **Resume**:
+  1. The app waits for the machine to finish its buffered moves (a held machine gets
+     `~` first) and reach Idle.
+  2. Every line that got an `ok` ran. Of the lines sent but not acknowledged, some
+     prefix may have arrived and run. The app picks the one whose end point matches
+     where the pen is now (X/Y, 0.05 mm). If several match, it takes the earliest, so
+     it may redraw a short piece but never skips one.
+  3. It sends `G21 G90`, pen up, travel to the last point, puts the pen back at the
+     program's height, restores the feed, and continues from the next line.
+  It refuses to resume, and says why, if the machine is in Alarm, if the controller
+  restarted (its banner arrives, or the position matches no candidate line, which is
+  what a reboot or lost steps look like), or if it is in Door, Sleep or Check. Stop
+  while the link is down just abandons the job; once connected it soft-resets as usual.
+  A job that finished during the drop is marked done. The logic is `src/resume.ts`
+  and the `reconnecting` / `interrupted` / `resyncing` states in `src/streamer.ts`.
+
+## Troubleshooting: the connection drops mid-job
+
+The console logs every connection change with a time and the WebSocket close code,
+and on a mid-job drop it prints the lines around where the job was. That is enough to
+tell the causes below apart on the next run.
+
+**What FluidNC does (from the v4.1.1 source).** FluidNC closes a WebSocket client
+itself if its outgoing queue fills **while the machine is moving**
+(`WSChannel::send_frame`: in a motion state it does not wait, and a failed send with a
+full queue calls `client->close()`). The queue holds `WS_MAX_QUEUED_MESSAGES` = 8
+frames, and frames only pile up when the ESP32 cannot hand data to TCP, i.e. while
+the browser is not acknowledging it: a WiFi stall, retries or interference. When idle,
+FluidNC defers the output instead of closing, so a flaky link looks healthy until a job
+runs. During a job the outgoing frames are one per `ok` (FluidNC flushes output after
+8 ms idle, so `ok`s more than 8 ms apart are separate frames) plus status reports (5/s
+auto-reports, and 2/s more from the app's `?` poll). Generated jobs vary a lot in line
+rate: on the Generate styles the densest second runs about 2 to 4 times the median
+(e.g. 27 to 36 lines/s against 7 to 15), so the same stretch of a drawing can be the
+place where a short stall tips the queue over.
+
+**Telling the causes apart.**
+
+| Console shows | Likely cause |
+| ------------- | ------------ |
+| `Connection closed (code 1005)`, reconnects within a second or two, Resume finds the position | FluidNC closed the socket with a close frame: send queue full during motion, or another tab of this app (or the FluidNC WebUI) opened a socket in the same browser session. |
+| `Connection closed (code 1006)`, reconnects quickly, Resume finds the position | The TCP connection died without a close frame: a WiFi drop, or FluidNC's close that never got through a stalled link. |
+| `No status reply from FluidNC` | Nothing arrived for 5 s: the link stalled or the ESP32 stopped answering. |
+| Resume says the position matches no line, the pen dropped, or the position reads X0 Y0 where it should not | The ESP32 rebooted, most likely a brownout. Reconnecting also takes longer (boot plus WiFi join). |
+
+**Things to try, cheapest first.**
+
+1. Run the same drawing again with the browser tab in front and the Mac on power, and
+   note the console lines at the drop. If it drops at the same line number again, that
+   points at content (dense segments), not at random WiFi loss.
+2. Capture FluidNC's own log: connect USB, open a serial terminal at 115200, run
+   `$Message/Level=Debug`, then start the job over WiFi. Look for `Websocket queue full
+   while sending to cid#…`, `WebSocket disconnect cid#…` or `backlog … closing`. A
+   reboot prints the ESP32 boot log instead, with `Brownout detector was triggered` if
+   it was the supply. `$SS` shows the startup log after a reboot.
+3. Check `$WiFi/PsMode` is `None` (the v4.1.1 default). Modem sleep delays delivery.
+4. Improve the link: move the plotter or the access point, use a 2.4 GHz network with
+   less traffic, or give the ESP32 an external antenna.
+5. Fewer frames while drawing: lower **Lines in flight** (fewer `ok`s outstanding), or
+   send `$RI=1000` from the console after connecting to slow FluidNC's auto-reports on
+   this socket from 200 ms to 1 s (it resets on every new connection).
+6. If it is a brownout: check the buck converter holds 5.0 V under load (servo moving,
+   both motors running), add a few hundred µF at the ESP32's 5 V input and at the servo,
+   or power the servo from its own regulator.
 
 ## Path planning and G-code
 
@@ -456,7 +523,9 @@ an older config where `$H` only lifts the pen.
 
 `test/sim.integration.test.ts` runs the real connection and streamer against it: the
 connected handshake, a full job under flow control, pause/resume, stop with pen lift,
-abort on `error:`, Set origin with both configs, and reconnect after the server restarts.
+abort on `error:`, Set origin with both configs, reconnect after the server restarts,
+and a socket dropped mid-job then resumed (checking every segment is drawn once). Like
+FluidNC, the mock keeps running lines a dropped client already sent.
 
 ## Not done yet
 

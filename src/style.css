@@ -304,6 +304,15 @@ progress {
   color: var(--danger);
 }
 
+#job-text {
+  white-space: pre-line;
+}
+
+#job-text[data-state='reconnecting'],
+#job-text[data-state='interrupted'] {
+  color: var(--warn);
+}
+
 .row {
   display: flex;
   flex-wrap: wrap;
